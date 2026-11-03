@@ -2,6 +2,7 @@
 
 import type { LootItem } from "@/lib/loot";
 import type { Stage } from "@/lib/stages";
+import { ROUTE_NAME, type Route } from "@/lib/routes";
 
 type Props = {
   seconds: number;
@@ -12,17 +13,26 @@ type Props = {
   onNext: () => void;
   /** Set after the final stage: the ending comic. */
   onEnding: (() => void) | null;
+  /** Ways across this win found for the first time, and how many are still hidden. */
+  newRoutes: Route[];
+  routesLeft: number;
   onRetry: () => void;
   onNewPhoto: () => void;
 };
 
-export function SuccessCard({ seconds, extractions, used, stageName, nextStage, onNext, onEnding, onRetry, onNewPhoto }: Props) {
+export function SuccessCard({ seconds, extractions, used, stageName, nextStage, onNext, onEnding, newRoutes, routesLeft, onRetry, onNewPhoto }: Props) {
   const mm = String(Math.floor(seconds / 60)).padStart(2, "0"), ss = String(seconds % 60).padStart(2, "0");
   return (
     <div className="success-backdrop" role="dialog" aria-label="Escape success">
       <div className="success-card">
         <h2 className="success-title">ESCAPE SUCCESS!</h2>
         <p className="success-sub">{stageName} cleared. You stole reality and beat the sketch!</p>
+        {newRoutes.length > 0 && (
+          <p className="new-route">
+            New way across: <b>{newRoutes.map((r) => ROUTE_NAME[r]).join(" + ")}</b>
+            {routesLeft > 0 ? ` · ${routesLeft} more hidden. Try other loot.` : " · You found them all!"}
+          </p>
+        )}
         <div className="success-stats">
           <div>
             <span className="muted">Objects used</span>

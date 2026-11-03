@@ -18,6 +18,8 @@ export type GapResult = {
   /** Thickest opaque extent over the gap, measured against the walk line. */
   thickness: number;
   reason: string | null;
+  /** A plate or hook that opens this gap has lowered its drawbridge. */
+  lowered: boolean;
 };
 export type PlateResult = { id: string; covered: boolean; coverage: number; need: number };
 export type HookResult = { id: string; hung: boolean };
@@ -104,7 +106,7 @@ export function judgeGap(g: Gap, placements: readonly Placement[]): GapResult {
   let reason: string | null = null;
   if (tripsLaser) reason = `Too thick — trips the lasers (needs ≤ ${g.slotAbove + g.slotBelow}px, this is ${thickness}px)`;
   else if (!spans) reason = span === 0 ? "Nothing spans the gap" : `Doesn't span both ledges (${span}/${spanNeeded}px)`;
-  return { id: g.id, bridged: spans && !tripsLaser, span, spanNeeded, tripsLaser, thickness, reason };
+  return { id: g.id, bridged: spans && !tripsLaser, span, spanNeeded, tripsLaser, thickness, reason, lowered: false };
 }
 
 /** Where the thief stands over a gap: the top of whatever bridges it near the walk line. */
@@ -142,12 +144,13 @@ export function judge(stage: Stage, placements: readonly Placement[]): Judgement
   const plates = stage.plates.map((p) => judgePlate(p, placements));
   const hooks = stage.hooks.map((h) => judgeHook(h, placements));
   const doors: Record<string, boolean> = {};
-  for (const d of stage.doors) doors[d.id] = false;
-  stage.plates.forEach((p, i) => plates[i].covered && (doors[p.opens] = true));
-  stage.hooks.forEach((h, i) => hooks[i].hung && (doors[h.opens] = true));
+  const opened = new Set<string>();
+  stage.plates.forEach((p, i) => plates[i].covered && opened.add(p.opens));
+  stage.hooks.forEach((h, i) => hooks[i].hung && opened.add(h.opens));
+  for (const d of stage.doors) doors[d.id] = opened.has(d.id);
   return {
     cameras: stage.cameras.map((c) => judgeCamera(c, placements)),
-    gaps: stage.gaps.map((g) => judgeGap(g, placements)),
+    gaps: stage.gaps.map((g) => ({ ...judgeGap(g, placements), lowered: opened.has(g.id) })),
     plates,
     hooks,
     beams: stage.beams.map((b) => judgeBeam(b, placements)),
@@ -155,12 +158,24 @@ export function judge(stage: Stage, placements: readonly Placement[]): Judgement
   };
 }
 
+/** Plates and hooks wired to a gap's drawbridge rather than to a door. */
+export const gapOpeners = (stage: Stage, gapId: string) => ({
+  plates: stage.plates.filter((p) => p.opens === gapId),
+  hooks: stage.hooks.filter((h) => h.opens === gapId),
+});
+const opensGap = (stage: Stage, id: string) => stage.gaps.some((g) => g.id === id);
+
+/** The thief can walk over the gap: something bridges it, or its drawbridge is down. */
+export const crossable = (r: GapResult) => r.bridged || r.lowered;
+
 export type Mission = { id: string; label: string; done: boolean; detail: string; hint: string };
 
 /** The stage's checklist, in the order the thief meets them. */
 export function missionList(stage: Stage, j: Judgement): Mission[] {
   const m: Mission[] = [];
+  // Drawbridge controls aren't separate jobs: they're one of the ways across (see "Cross the gap").
   stage.plates.forEach((p, i) =>
+    !opensGap(stage, p.opens) &&
     m.push({
       id: p.id,
       label: "Weigh down the plate",
@@ -170,6 +185,7 @@ export function missionList(stage: Stage, j: Judgement): Mission[] {
     }),
   );
   stage.hooks.forEach((h, i) =>
+    !opensGap(stage, h.opens) &&
     m.push({
       id: h.id,
       label: "Hang something on the hook",
@@ -196,15 +212,26 @@ export function missionList(stage: Stage, j: Judgement): Mission[] {
       hint: "Anything that crosses the red rays blocks the view.",
     }),
   );
-  stage.gaps.forEach((g, i) =>
+  stage.gaps.forEach((g, i) => {
+    const o = gapOpeners(stage, g.id);
+    if (o.plates.length || o.hooks.length) {
+      const r = j.gaps[i];
+      return m.push({
+        id: g.id,
+        label: "Cross the gap",
+        done: crossable(r),
+        detail: r.bridged ? "Bridged" : r.lowered ? "Drawbridge down" : r.tripsLaser ? "Trips the lasers" : "More than one way across",
+        hint: "There's more than one way across. Look at what each thing you stole is shaped like — long, heavy, or hollow.",
+      });
+    }
     m.push({
       id: g.id,
       label: "Bridge the gap",
       done: j.gaps[i].bridged,
       detail: j.gaps[i].tripsLaser ? "Trips the lasers" : `Span ${j.gaps[i].span}/${j.gaps[i].spanNeeded}px`,
       hint: "Needs one unbroken span across both ledges — and thin enough to slip between the lasers.",
-    }),
-  );
+    });
+  });
   return m;
 }
 

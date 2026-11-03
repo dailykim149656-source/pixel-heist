@@ -91,12 +91,13 @@ export const STAGES: Stage[] = [
   {
     id: 3,
     name: "The Gallery",
-    teaser: "Camera and gap together. One object can't do both jobs.",
+    teaser: "Camera and gap. There's more than one way across — the drawbridge controls are on the far side.",
     floors: [{ x0: -10, x1: 430, y: FLOOR }, { x0: 560, x1: 970, y: FLOOR }],
     cameras: [camera({ id: "cam", x: 600, fromX: 150, toX: 390 })],
+    // Three ways across, none of them required: lay a bar over it, or work either drawbridge control.
     gaps: [gap({ id: "gap", left: 430, right: 560 })],
-    plates: [],
-    hooks: [],
+    plates: [{ id: "plate", x: 610, width: 130, y: FLOOR, cover: 0.7, opens: "gap" }],
+    hooks: [{ id: "hook", x: 700, y: 190, opens: "gap" }],
     doors: [],
     beams: [],
     vaultX: 830,

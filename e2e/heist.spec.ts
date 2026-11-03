@@ -70,7 +70,9 @@ async function dropLootTurned(page: Page, index: number, p: Placement) {
   await page.mouse.up();
 }
 
-const mission = (page: Page, name: string) => page.locator(".checklist li", { hasText: name });
+/** Stage 3's gap has several ways across, so its mission reads "Cross the gap" there. */
+const mission = (page: Page, name: string) =>
+  page.locator(".checklist li", { hasText: name === "Bridge the gap" ? /Bridge the gap|Cross the gap/ : name });
 
 test("T10: recorded mug + ruler → block camera, bridge gap, escape", async ({ page }) => {
   await startSample(page);
@@ -322,4 +324,28 @@ test.describe("phone", () => {
     await page.getByRole("button", { name: /RUN HEIST/ }).click();
     await expect(page.getByText("ESCAPE SUCCESS!")).toBeVisible({ timeout: 10_000 });
   });
+});
+
+test("Stage 3 has more than one way across: the mug on the far plate lowers the drawbridge", async ({ page }) => {
+  const s = stageById(3);
+  const ruler = loadFixtureShape("ruler"), mug = loadFixtureShape("mug");
+  const stays = (p: Placement) => { const q = snapPlacement(s, p); return q.x === p.x && q.y === p.y; };
+  const cam = first(cameraCandidates(s, s.cameras[0], ruler), stays)!;
+  const weight = first(plateCandidates(s, s.plates[0], mug))!;
+
+  await startSample(page, "A", 3);
+  await page.getByRole("radio", { name: "Recorded" }).click();
+  await expect(page.locator(".routes")).toContainText("0/3");
+  await steal(page, MUG);
+  await steal(page, RULER);
+  await dropLootTurned(page, 1, cam);
+  await dropLootTurned(page, 0, weight);
+  await expect(mission(page, "Block the camera")).toHaveClass(/done/);
+  await expect(mission(page, "Cross the gap")).toContainText("Drawbridge down");
+  await page.getByRole("button", { name: /RUN HEIST/ }).click();
+  await expect(page.getByText("ESCAPE SUCCESS!")).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator(".new-route")).toContainText("Weight on the plate");
+  await expect(page.locator(".new-route")).toContainText("2 more hidden");
+  await page.getByRole("button", { name: "Retry ↺" }).click();
+  await expect(page.locator(".routes")).toContainText("1/3");
 });

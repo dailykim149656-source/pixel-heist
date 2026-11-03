@@ -9,6 +9,7 @@ import { SEGMENT_ERROR_TEXT, type PromptPoint, type SegmentErrorCode } from "@/l
 import { samBagged, samError, samGreeting, samRecordedMiss, samReply, yourRequest, type ChatMessage } from "@/lib/sam-voice";
 import { MAX_LOOT, ROTATE_STEP_DEG, THIEF, WORLD } from "@/lib/stage";
 import { STAGES, stageById } from "@/lib/stages";
+import { loadRoutes, routesFor, routesUsed, saveRoutes, type Route } from "@/lib/routes";
 import { SAMPLES, type SampleId } from "@/lib/samples";
 import type { Scene } from "@/lib/draw";
 import { LootBar } from "./LootBar";
@@ -50,6 +51,10 @@ export function Game({ onExit, onEnding }: { onExit: () => void; onEnding: () =>
       // storage unavailable: progress just isn't remembered
     }
   }, []);
+  // Ways across found so far, per stage, and the ones the latest win added.
+  const [routes, setRoutes] = useState<Record<number, Route[]>>({});
+  const [newRoutes, setNewRoutes] = useState<Route[]>([]);
+  useEffect(() => setRoutes(loadRoutes()), []);
   const [run, setRun] = useState<{ plan: RunPlan; startedAt: number } | null>(null);
   const [now, setNow] = useState(0);
   const [extractions, setExtractions] = useState(0);
@@ -308,6 +313,15 @@ export function Game({ onExit, onEnding }: { onExit: () => void; onEnding: () =>
         setGameState(run.plan.outcome);
         if (run.plan.outcome === "WON") {
           setFinishedAt(Date.now());
+          const used = routesUsed(stage, settled);
+          const known = routes[stageId] ?? [];
+          const fresh = used.filter((r) => !known.includes(r));
+          setNewRoutes(fresh);
+          if (fresh.length) {
+            const next = { ...routes, [stageId]: [...known, ...fresh] };
+            setRoutes(next);
+            saveRoutes(next);
+          }
           const next = Math.min(STAGES.length, stageId + 1);
           setUnlocked((u) => {
             const v = Math.max(u, next);
@@ -324,7 +338,7 @@ export function Game({ onExit, onEnding }: { onExit: () => void; onEnding: () =>
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [run, gameState, stageId]);
+  }, [run, gameState, stageId, stage, settled, routes]);
 
   const resetRun = useCallback(() => {
     setRun(null);
@@ -446,6 +460,7 @@ export function Game({ onExit, onEnding }: { onExit: () => void; onEnding: () =>
           hasPhoto={!!photo}
           inference={inference}
           photoKind={photo?.kind ?? null}
+          routes={{ all: routesFor(stage), found: routes[stageId] ?? [] }}
         />
       </main>
 
@@ -468,6 +483,8 @@ export function Game({ onExit, onEnding }: { onExit: () => void; onEnding: () =>
           nextStage={STAGES.find((st) => st.id === stageId + 1) ?? null}
           onNext={() => goToStage(stageId + 1)}
           onEnding={stageId === STAGES.length ? onEnding : null}
+          newRoutes={newRoutes}
+          routesLeft={routesFor(stage).length - (routes[stageId] ?? []).length}
           onRetry={resetRun}
           onNewPhoto={() => {
             resetAll();

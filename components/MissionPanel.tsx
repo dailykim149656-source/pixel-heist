@@ -4,6 +4,7 @@ import type { GameState } from "@/lib/heist";
 import { missionList, type Judgement, type Mission } from "@/lib/judge";
 import type { Stage } from "@/lib/stages";
 import type { Inference } from "./Game";
+import { ROUTE_NAME, type Route } from "@/lib/routes";
 
 type Props = {
   stage: Stage;
@@ -17,11 +18,12 @@ type Props = {
   hasPhoto: boolean;
   inference: Inference;
   photoKind: "sample" | "upload" | null;
+  routes: { all: Route[]; found: Route[] };
 };
 
 const FAIL_TITLE: Partial<Record<GameState, string>> = { CAUGHT: "Caught!", FELL: "Fell!", STUCK: "Stuck!" };
 
-export function MissionPanel({ stage, missions, vaultReached, settled, boxJudged, gameState, failure, hasLoot, hasPhoto, inference, photoKind }: Props) {
+export function MissionPanel({ stage, missions, vaultReached, settled, boxJudged, gameState, failure, hasLoot, hasPhoto, inference, photoKind, routes }: Props) {
   const next = missions.find((m) => !m.done);
   const hint = !hasPhoto
     ? "Load a photo, then click an object to steal it."
@@ -44,6 +46,21 @@ export function MissionPanel({ stage, missions, vaultReached, settled, boxJudged
         ))}
         <Check done={vaultReached} label="Reach the vault" />
       </ul>
+
+      {routes.all.length > 0 && (
+        <div className="routes" aria-label="Ways across found">
+          <span className="routes-title">
+            Ways across found <b>{routes.found.length}/{routes.all.length}</b>
+          </span>
+          <ul>
+            {routes.all.map((r) => (
+              <li key={r} className={routes.found.includes(r) ? "found" : ""}>
+                {routes.found.includes(r) ? `✓ ${ROUTE_NAME[r]}` : "? ? ?"}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {boxJudged && <XrayVerdict mask={missions} box={missionList(stage, boxJudged)} />}
 
@@ -81,6 +98,7 @@ const SHORT_LABEL: Record<string, string> = {
   "Weigh down the plate": "Plate",
   "Hang something on the hook": "Hook",
   "Keep the beam clear": "Beam",
+  "Cross the gap": "Gap",
 };
 
 function XrayVerdict({ mask, box }: { mask: Mission[]; box: Mission[] }) {

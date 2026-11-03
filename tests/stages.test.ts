@@ -63,23 +63,43 @@ describe("Stage 2 — The Broken Corridor (gap)", () => {
   });
 });
 
-describe("Stage 3 — The Gallery (camera + gap)", () => {
+describe("Stage 3 — The Gallery (camera + gap, three ways across)", () => {
   const s = stageById(3);
-  it("desk A: mug on the camera, ruler over the gap", () => {
+  const plate = s.plates[0], hook = s.hooks[0];
+  const across = (p: Placement[]) => judge(s, p).gaps[0];
+  it("an empty gallery: caught first; with the camera blocked, you fall", () => {
+    const cam = first(cameraCandidates(s, s.cameras[0], A.mug))!;
+    expect(win(3, []).outcome).toBe("CAUGHT");
+    expect(win(3, [cam]).outcome).toBe("FELL");
+  });
+  it("way 1 — a thin bar over the gap: mug on the camera, ruler across", () => {
     const cam = first(cameraCandidates(s, s.cameras[0], A.mug))!;
     const bridge = first(gapPlacements(s, s.gaps[0], A.ruler), bridges(3))!;
-    expect(win(3, [])).toMatchObject({ outcome: "CAUGHT" });
-    expect(win(3, [cam]).outcome).toBe("FELL");
+    expect(across([bridge])).toMatchObject({ bridged: true, lowered: false });
     expect(win(3, [cam, bridge]).outcome).toBe("WON");
   });
-  it("desk B: calculator on the camera, pen over the gap", () => {
+  it("way 2 — something heavy on the far plate lowers the drawbridge: ruler on the camera, mug on the plate", () => {
+    const cam = first(cameraCandidates(s, s.cameras[0], A.ruler))!;
+    const weight = first(plateCandidates(s, plate, A.mug))!;
+    expect(across([weight])).toMatchObject({ bridged: false, lowered: true });
+    expect(win(3, [cam, weight]).outcome).toBe("WON");
+  });
+  it("way 3 — something with a hole on the hook lowers it too: ruler on the camera, mug by its handle", () => {
+    const cam = first(cameraCandidates(s, s.cameras[0], A.ruler))!;
+    const hung = first(hookCandidates(s, hook, A.mug))!;
+    expect(across([hung])).toMatchObject({ bridged: false, lowered: true });
+    expect(win(3, [cam, hung]).outcome).toBe("WON");
+  });
+  it("each way still asks for the right shape", () => {
+    for (const shape of [A.ruler, B.pen]) expect(first(plateCandidates(s, plate, shape))).toBeNull(); // too thin to weigh
+    for (const shape of [A.ruler, B.pen, B.calculator, B.sticky]) expect(first(hookCandidates(s, hook, shape))).toBeNull(); // no hole
+    for (const p of gapPlacements(s, s.gaps[0], A.mug)) expect(judgeGap(s.gaps[0], [p]).bridged).toBe(false); // too thick
+  });
+  it("desk B finds all three as well", () => {
     const cam = first(cameraCandidates(s, s.cameras[0], B.calculator))!;
-    const bridge = first(gapPlacements(s, s.gaps[0], B.pen), bridges(3))!;
-    expect(win(3, [cam, bridge]).outcome).toBe("WON");
-  });
-  it("swapping roles fails: with the ruler on the camera, the mug can't bridge", () => {
-    expect(first(cameraCandidates(s, s.cameras[0], A.ruler))).not.toBeNull();
-    for (const p of gapPlacements(s, s.gaps[0], A.mug)) expect(judgeGap(s.gaps[0], [p]).bridged).toBe(false);
+    expect(win(3, [cam, first(gapPlacements(s, s.gaps[0], B.pen), bridges(3))!]).outcome).toBe("WON");
+    expect(win(3, [cam, first(plateCandidates(s, plate, B.sticky))!]).outcome).toBe("WON");
+    expect(win(3, [cam, first(hookCandidates(s, hook, B.scissors))!]).outcome).toBe("WON");
   });
 });
 

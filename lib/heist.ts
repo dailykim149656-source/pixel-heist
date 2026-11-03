@@ -1,4 +1,4 @@
-import { bridgeSurfaceY, type Judgement } from "./judge";
+import { bridgeSurfaceY, crossable, type Judgement } from "./judge";
 import type { Placement } from "./geometry";
 import { THIEF } from "./stage";
 import type { Stage } from "./stages";
@@ -22,7 +22,7 @@ export function planRun(stage: Stage, j: Judgement): RunPlan {
   });
   stage.gaps.forEach((g, i) => {
     const r = j.gaps[i];
-    events.push({ x: g.left + 10, fail: r.bridged ? null : { outcome: "FELL", stopX: g.left + 10, reason: r.reason ?? "The gap isn't bridged" } });
+    events.push({ x: g.left + 10, fail: crossable(r) ? null : { outcome: "FELL", stopX: g.left + 10, reason: r.reason ?? "Nothing gets you across the gap" } });
   });
   for (const d of stage.doors) {
     const opener = stage.plates.some((p) => p.opens === d.id) ? "weigh down the plate" : "hang something on the hook";

@@ -392,3 +392,11 @@ button { font: inherit; color: inherit; }
   .world-actions .btn, .segmented button, .link { min-height: 40px; }
   .world-actions .btn[aria-label^="Rotate"] { min-width: 48px; font-size: 20px; }
 }
+
+/* ---------- ways across ---------- */
+.routes { margin-top: 12px; border: 1.5px dashed var(--pick); border-radius: 6px; padding: 8px 10px; background: #fbf8ff; }
+.routes-title { font: 16px var(--font-hand), cursive; }
+.routes ul { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.routes li { font-size: 12px; padding: 2px 8px; border-radius: 10px; border: 1px dashed var(--ink-soft); color: var(--ink-soft); }
+.routes li.found { border: 1px solid var(--pick); color: var(--pick); background: var(--pick-bg); font-weight: 600; }
+.new-route { margin: -8px 0 14px; padding: 6px 10px; background: var(--pick-bg); border-left: 3px solid var(--pick); font-size: 14px; }

@@ -88,6 +88,7 @@ export function drawScene(canvas: HTMLCanvasElement, scene: Scene) {
   const rc = rough.canvas(canvas);
   for (const d of staticDrawables(stage)) rc.draw(d);
 
+  stage.gaps.forEach((g, i) => drawDrawbridge(ctx, g, stage, scene.live.gaps[i].lowered));
   stage.plates.forEach((p, i) => drawPlate(ctx, p, scene.live.plates[i].covered));
   stage.hooks.forEach((h) => drawHook(ctx, h, stage));
   stage.doors.forEach((d) => drawDoor(ctx, d.x, floorY(stage, d.x), scene.live.doors[d.id]));
@@ -236,8 +237,39 @@ function drawPlate(ctx: CanvasRenderingContext2D, p: Stage["plates"][number], co
   ctx.restore();
 }
 
+/**
+ * A drawbridge hinged on the gap's far post, if a plate or hook is wired to it: standing up
+ * until one of them is satisfied, then lying along the walk line.
+ */
+function drawDrawbridge(ctx: CanvasRenderingContext2D, g: Gap, stage: Stage, lowered: boolean) {
+  const wired = stage.plates.filter((p) => p.opens === g.id);
+  if (!wired.length && !stage.hooks.some((h) => h.opens === g.id)) return;
+  const len = g.right - g.left + 4;
+  ctx.save();
+  ctx.translate(g.right, g.yRight);
+  // The plank runs along local −x from the hinge: down = along the walk line, up = straight up.
+  ctx.rotate(lowered ? Math.atan2(g.yRight - g.yLeft, g.right - g.left) : Math.PI / 2);
+  ctx.fillStyle = lowered ? "#d8c39a" : "rgba(216, 195, 154, 0.55)";
+  ctx.strokeStyle = lowered ? INK : "rgba(63,58,52,0.5)";
+  ctx.lineWidth = 2;
+  roundRect(ctx, -len, -8, len, 8, 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.lineWidth = 1;
+  for (let x = -len + 14; x < 0; x += 16) line(ctx, x, -8, x, 0);
+  ctx.restore();
+  // Plates are wired to it along the floor.
+  ctx.save();
+  ctx.strokeStyle = "rgba(63,58,52,0.55)";
+  ctx.setLineDash([3, 5]);
+  ctx.lineWidth = 1.5;
+  for (const p of wired) line(ctx, p.x, p.y + 6, g.right + 4, p.y + 6);
+  ctx.restore();
+}
+
 function drawHook(ctx: CanvasRenderingContext2D, h: Stage["hooks"][number], stage: Stage) {
   const door = stage.doors.find((d) => d.id === h.opens);
+  const gap = stage.gaps.find((g) => g.id === h.opens);
   ctx.save();
   ctx.strokeStyle = INK;
   ctx.lineWidth = 2.5;
@@ -251,6 +283,11 @@ function drawHook(ctx: CanvasRenderingContext2D, h: Stage["hooks"][number], stag
     ctx.moveTo(h.x, 70);
     ctx.lineTo(door.x, 70);
     ctx.lineTo(door.x, floorY(stage, door.x) - 150);
+  }
+  if (gap) {
+    ctx.moveTo(h.x, 70);
+    ctx.lineTo(gap.right + 4, 70);
+    ctx.lineTo(gap.right + 4, gap.yRight - gap.right + gap.left - 10);
   }
   ctx.stroke();
   ctx.setLineDash([]);
@@ -380,7 +417,10 @@ function drawThief(ctx: CanvasRenderingContext2D, thief: Scene["thief"]) {
 function stickers(ctx: CanvasRenderingContext2D, scene: Scene) {
   const { stage, settled } = scene;
   stage.cameras.forEach((c, i) => settled.cameras[i].blocked && sticker(ctx, c.x - 190, c.y - 50, "Camera blocked ✓"));
-  stage.gaps.forEach((g, i) => settled.gaps[i].bridged && sticker(ctx, g.left - 10, Math.max(g.yLeft, g.yRight) + 40, "Bridge ✓"));
+  stage.gaps.forEach((g, i) => {
+    const r = settled.gaps[i];
+    if (r.bridged || r.lowered) sticker(ctx, g.left - 10, Math.max(g.yLeft, g.yRight) + 40, r.bridged ? "Bridge ✓" : "Drawbridge ✓");
+  });
   stage.plates.forEach((p, i) => settled.plates[i].covered && sticker(ctx, p.x, p.y + 40, "Plate down ✓"));
   stage.hooks.forEach((h, i) => settled.hooks[i].hung && sticker(ctx, h.x + 20, h.y - 60, "Hooked ✓"));
 }

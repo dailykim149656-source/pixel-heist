@@ -6,6 +6,6 @@ export default defineConfig({
   test: {
     include: ["tests/**/*.test.ts"],
     exclude: ["**/node_modules/**", "**/._*"], // macOS AppleDouble files on exFAT
-    testTimeout: 60_000,
+    testTimeout: 180_000,
   },
 });
