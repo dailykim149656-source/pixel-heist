@@ -176,7 +176,7 @@ export const STAGES: Stage[] = [
   {
     id: 9,
     name: "The Counterweight",
-    teaser: "Weigh the plate, climb a steeper stair, and stay out of sight. Only the slimmest bar makes this climb.",
+    teaser: "Weigh the plate, climb a steeper stair, and stay out of sight. Only the slimmest bar makes this climb — turn it to match the slope.",
     floors: [{ x0: -10, x1: 560, y: FLOOR }, { x0: 690, x1: 970, y: FLOOR - 50 }],
     cameras: [camera({ id: "cam", x: 600, fromX: 380, toX: 520, need: 6, forbiddenRadius: 70 })],
     gaps: [gap({ id: "gap", left: 560, right: 690, yRight: FLOOR - 50, slotAbove: 36 })],
@@ -189,7 +189,7 @@ export const STAGES: Stage[] = [
   {
     id: 10,
     name: "The Grand Vault",
-    teaser: "Everything at once: a hook, two cameras and the climb to the diamond. Bring both desks.",
+    teaser: "Everything at once: a hook, two cameras and the steep climb to the diamond (a slim bar, turned to the slope). Bring both desks.",
     floors: [{ x0: -10, x1: 600, y: FLOOR }, { x0: 730, x1: 970, y: FLOOR - 50 }],
     cameras: [
       camera({ id: "cam-1", x: 300, fromX: 80, toX: 200, need: 6, forbiddenRadius: 70 }),

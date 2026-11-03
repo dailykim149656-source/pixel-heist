@@ -109,7 +109,9 @@ export function judgeGap(g: Gap, placements: readonly Placement[]): GapResult {
     reason =
       thickness > g.slotAbove + g.slotBelow
         ? `Too thick — trips the lasers (needs ≤ ${g.slotAbove + g.slotBelow}px, this is ${thickness}px)`
-        : "Thin enough, but it's off the walk line and touching a laser — lay it flat across the two ledges";
+        : g.yLeft !== g.yRight
+          ? "Thin enough, but not at the slope's angle — turn it (⟲ / Shift+R) to match the climb, or try something slimmer"
+          : "Thin enough, but it's off the walk line and touching a laser — lay it flat across the two ledges";
   else if (!spans) reason = span === 0 ? "Nothing spans the gap" : `Doesn't span both ledges (${span}/${spanNeeded}px)`;
   return { id: g.id, bridged: spans && !tripsLaser, span, spanNeeded, tripsLaser, thickness, reason, lowered: false };
 }
@@ -297,7 +299,15 @@ export function snapPlacement(stage: Stage, p: Placement): Placement {
     const centre = bridgeShaped ? GAP_CENTER_SNAP_BRIDGE : GAP_CENTER_SNAP;
     const centred = Math.abs(itemCenter - gapCenter) <= centre;
     if (centred) q = { ...q, x: q.x + gapCenter - itemCenter };
-    return restOn(q, (x) => (x >= g.left - g.support && x <= g.right + g.support ? gapLineY(g, x) : null), bridgeShaped && centred ? GAP_DROP_SNAP : undefined);
+    const surface = (x: number) => (x >= g.left - g.support && x <= g.right + g.support ? gapLineY(g, x) : null);
+    const settled = restOn(q, surface, bridgeShaped && centred ? GAP_DROP_SNAP : undefined);
+    // A bar turned to the slope one way or the other is the same tilt. Real cut-outs aren't
+    // symmetric (a pen's clip end is thicker), so if this way round doesn't bridge, try it flipped.
+    if (bridgeShaped && centred && !judgeGap(g, [settled]).bridged) {
+      const flipped = restOn({ ...q, rotationDeg: (q.rotationDeg + 180) % 360 }, surface, GAP_DROP_SNAP);
+      if (judgeGap(g, [flipped]).bridged) return flipped;
+    }
+    return settled;
   }
   for (const pl of stage.plates) {
     if (b.right < pl.x || b.left > pl.x + pl.width) continue;

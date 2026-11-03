@@ -256,3 +256,20 @@ describe("dropping a bar over a gap", () => {
     expect(r.reason).toMatch(/off the walk line/);
   });
 });
+
+describe("steep gaps (stages 9 and 10)", () => {
+  it("one press of ⟲ (345°) is enough for the pen: the drop tries the bar flipped too", () => {
+    for (const id of [9, 10]) {
+      const s = stageById(id), g = s.gaps[0];
+      for (const rotationDeg of [345, 165]) {
+        const p = snapPlacement(s, { shape: B.pen, x: (g.left + g.right) / 2, y: (g.yLeft + g.yRight) / 2 - 40, rotationDeg });
+        expect(judgeGap(g, [p]).bridged, `stage ${id} at ${rotationDeg}°`).toBe(true);
+      }
+    }
+  });
+  it("an unturned bar is told to turn, not that it's too thick", () => {
+    const s = stageById(9), g = s.gaps[0];
+    const p = snapPlacement(s, { shape: B.pen, x: (g.left + g.right) / 2, y: g.yLeft - 20, rotationDeg: 0 });
+    expect(judgeGap(g, [p]).reason).toMatch(/turn it/);
+  });
+});
