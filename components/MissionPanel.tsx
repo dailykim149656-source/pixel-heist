@@ -5,6 +5,7 @@ import { missionList, type Judgement, type Mission } from "@/lib/judge";
 import type { Stage } from "@/lib/stages";
 import type { Inference } from "./Game";
 import { ROUTE_NAME, type Route } from "@/lib/routes";
+import { LEVEL_NAME, type HintLevel } from "@/lib/hints";
 
 type Props = {
   stage: Stage;
@@ -19,11 +20,16 @@ type Props = {
   inference: Inference;
   photoKind: "sample" | "upload" | null;
   routes: { all: Route[]; found: Route[] };
+  muse: MuseState | null;
+  onAskMuse: (level: HintLevel) => void;
 };
+
+/** A hint from Muse: the engine's facts (plain) and Muse's wording of them, once it answers. */
+export type MuseState = { level: HintLevel; plain: string | null; text: string | null; status: "solving" | "asking" | "done" | "error"; latencyMs?: number };
 
 const FAIL_TITLE: Partial<Record<GameState, string>> = { CAUGHT: "Caught!", FELL: "Fell!", STUCK: "Stuck!" };
 
-export function MissionPanel({ stage, missions, vaultReached, settled, boxJudged, gameState, failure, hasLoot, hasPhoto, inference, photoKind, routes }: Props) {
+export function MissionPanel({ stage, missions, vaultReached, settled, boxJudged, gameState, failure, hasLoot, hasPhoto, inference, photoKind, routes, muse, onAskMuse }: Props) {
   const next = missions.find((m) => !m.done);
   const hint = !hasPhoto
     ? "Load a photo, then click an object to steal it."
@@ -77,6 +83,37 @@ export function MissionPanel({ stage, missions, vaultReached, settled, boxJudged
       <div className="hint-note">
         <span className="hint-label">Hint</span>
         <p>{hint}</p>
+      </div>
+
+      <div className="muse" aria-live="polite">
+        <div className="muse-head">
+          <span className="muse-avatar" aria-hidden>✦</span>
+          <span>
+            <b>Ask Muse</b> <span className="sam-role">the voice in your charm</span>
+            <small>AI model · Meta Muse Spark 1.3</small>
+          </span>
+        </div>
+        <div className="row tight muse-levels">
+          {([1, 2, 3] as HintLevel[]).map((l) => (
+            <button key={l} className={`btn btn-small${muse?.level === l ? " on" : ""}`} onClick={() => onAskMuse(l)} disabled={muse?.status === "solving" || muse?.status === "asking"}>
+              {LEVEL_NAME[l]}
+            </button>
+          ))}
+        </div>
+        {muse && (
+          <>
+            {muse.status === "solving" && <p className="muse-say muted">Muse is reading the room…</p>}
+            {muse.status === "asking" && <p className="muse-say typing-dots" aria-label="Muse is answering"><span /><span /><span /></p>}
+            {muse.text && <p className="muse-say">“{muse.text}”</p>}
+            {muse.status === "error" && <p className="fineprint">Muse didn&apos;t answer. Here&apos;s what the game knows:</p>}
+            {muse.plain && (
+              <p className="muse-facts">
+                <span>From the game engine{muse.latencyMs ? ` · Muse ${(muse.latencyMs / 1000).toFixed(1)}s` : ""}</span>
+                {muse.plain}
+              </p>
+            )}
+          </>
+        )}
       </div>
 
       <div className="api-status">

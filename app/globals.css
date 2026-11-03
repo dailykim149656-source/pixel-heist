@@ -400,3 +400,22 @@ button { font: inherit; color: inherit; }
 .routes li { font-size: 12px; padding: 2px 8px; border-radius: 10px; border: 1px dashed var(--ink-soft); color: var(--ink-soft); }
 .routes li.found { border: 1px solid var(--pick); color: var(--pick); background: var(--pick-bg); font-weight: 600; }
 .new-route { margin: -8px 0 14px; padding: 6px 10px; background: var(--pick-bg); border-left: 3px solid var(--pick); font-size: 14px; }
+
+/* ---------- Muse: the voice in the charm (Meta Muse Spark 1.3) ---------- */
+.muse { margin-top: 12px; border: 1.5px solid var(--pick); border-radius: 8px; background: #faf6ff; padding: 8px 10px; }
+.muse-head { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.muse-head small { display: block; font-size: 10.5px; color: var(--ink-soft); line-height: 1.2; }
+.muse-avatar {
+  flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+  background: #d9c6ff; border: 1.5px solid var(--pick); color: var(--pick); font-size: 15px;
+  box-shadow: 0 0 10px rgba(140, 82, 255, 0.35);
+}
+.muse-levels { margin-top: 8px; }
+.muse-levels .btn.on { background: var(--pick-bg); border-color: var(--pick); }
+.muse-say { margin: 8px 0 0; font: 17px/1.3 var(--font-hand), cursive; color: #4b2a99; }
+.muse-facts { margin: 8px 0 0; font-size: 12px; color: var(--ink-soft); border-top: 1px dashed var(--line); padding-top: 6px; }
+.muse-facts span { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.4px; }
+.typing-dots { display: inline-flex; gap: 4px; padding: 6px 0; }
+.typing-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--pick); animation: blink 1s infinite; }
+.typing-dots span:nth-child(2) { animation-delay: 0.15s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.3s; }

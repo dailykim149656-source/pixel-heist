@@ -349,3 +349,32 @@ test("Stage 3 has more than one way across: the mug on the far plate lowers the 
   await page.getByRole("button", { name: "Retry ↺" }).click();
   await expect(page.locator(".routes")).toContainText("1/3");
 });
+
+test("Ask Muse: hints come from the engine's facts, and skip what's already done", async ({ page }) => {
+  const s = stageById(3);
+  const cam = first(cameraCandidates(s, s.cameras[0], loadFixtureShape("mug")), (p) => p.rotationDeg === 0)!;
+  const sent: { level: number; done: string[]; todo: string[]; next: string[] }[] = [];
+  // LIVE_MUSE=1 lets the request through to Meta Muse Spark 1.3; otherwise Muse is stubbed.
+  await page.route("**/api/hint", async (route) => {
+    sent.push(route.request().postDataJSON());
+    if (process.env.LIVE_MUSE) return route.continue();
+    await route.fulfill({ json: { ok: true, text: "Your 2nd cut-out has the reach for that gap.", latencyMs: 2900 } });
+  });
+
+  await startSample(page, "A", 3);
+  await page.getByRole("radio", { name: "Recorded" }).click();
+  await steal(page, MUG);
+  await steal(page, RULER);
+  await dropLoot(page, 0, cam.x, cam.y, cam.shape.grid.height);
+  await expect(mission(page, "Block the camera")).toHaveClass(/done/);
+
+  await page.locator(".muse").getByRole("button", { name: "Clue" }).click();
+  const said = page.locator(".muse-say", { hasText: "“" });
+  await expect(said).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".muse-facts")).toContainText("2nd cut-out");
+  expect(sent[0]).toMatchObject({ level: 2, done: ["block the camera"], todo: ["cross the gap"] });
+  expect(sent[0].next.join(" ")).not.toMatch(/camera/);
+  if (process.env.SHOT) await page.locator(".mission").screenshot({ path: process.env.SHOT });
+  console.log("Muse:", await said.textContent());
+  console.log("Engine:", await page.locator(".muse-facts").textContent());
+});

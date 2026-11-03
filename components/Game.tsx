@@ -9,6 +9,8 @@ import { SEGMENT_ERROR_TEXT, type PromptPoint, type SegmentErrorCode } from "@/l
 import { samBagged, samError, samGreeting, samRecordedMiss, samReply, yourRequest, type ChatMessage } from "@/lib/sam-voice";
 import { MAX_LOOT, ROTATE_STEP_DEG, THIEF, WORLD } from "@/lib/stage";
 import { STAGES, stageById } from "@/lib/stages";
+import { hintFacts, plainHint, type HintLevel, type PlanFacts } from "@/lib/hints";
+import type { MuseState } from "./MissionPanel";
 import { loadRoutes, routesFor, routesUsed, saveRoutes, type Route } from "@/lib/routes";
 import { SAMPLES, type SampleId } from "@/lib/samples";
 import type { Scene } from "@/lib/draw";
@@ -55,6 +57,8 @@ export function Game({ onExit, onEnding }: { onExit: () => void; onEnding: () =>
   const [routes, setRoutes] = useState<Record<number, Route[]>>({});
   const [newRoutes, setNewRoutes] = useState<Route[]>([]);
   useEffect(() => setRoutes(loadRoutes()), []);
+  const [muse, setMuse] = useState<MuseState | null>(null);
+  const solver = useRef<Worker | null>(null);
   const [run, setRun] = useState<{ plan: RunPlan; startedAt: number } | null>(null);
   const [now, setNow] = useState(0);
   const [extractions, setExtractions] = useState(0);
@@ -294,6 +298,43 @@ export function Game({ onExit, onEnding }: { onExit: () => void; onEnding: () =>
     return () => window.removeEventListener("keydown", key);
   }, [rotate, selected, drag]);
 
+  // ---- Muse hints -----------------------------------------------------------------------
+  // The engine works out what's done and what would work with this loot (in a worker); Muse words it.
+  const askSeq = useRef(0);
+  const askMuse = useCallback(
+    async (level: HintLevel) => {
+      const seq = ++askSeq.current;
+      setMuse({ level, plain: null, text: null, status: "solving" });
+      solver.current ??= new Worker(new URL("../lib/solver.worker.ts", import.meta.url), { type: "module" });
+      const w = solver.current;
+      const items = loot.map((l) => ({ id: l.id, shape: l.shape }));
+      const facts = await new Promise<PlanFacts>((resolve) => {
+        w.onmessage = (e: MessageEvent<PlanFacts>) => resolve(e.data);
+        w.postMessage({ stageId: stage.id, items, budgetMs: 8000 });
+      });
+      if (seq !== askSeq.current) return;
+      const f = hintFacts(stage, settled, loot, facts, level);
+      const plain = plainHint(f);
+      setMuse({ level, plain, text: null, status: "asking" });
+      try {
+        const res = await fetch("/api/hint", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) });
+        const data = (await res.json()) as { ok: boolean; text?: string; latencyMs?: number };
+        if (seq !== askSeq.current) return;
+        setMuse(data.ok ? { level, plain, text: data.text!, status: "done", latencyMs: data.latencyMs } : { level, plain, text: null, status: "error" });
+      } catch {
+        if (seq === askSeq.current) setMuse({ level, plain, text: null, status: "error" });
+      }
+    },
+    [loot, stage, settled],
+  );
+  // A hint is about one moment: drop it when the board or the stage changes.
+  const boardKey = JSON.stringify(placed) + stageId + loot.length;
+  useEffect(() => {
+    askSeq.current++;
+    setMuse(null);
+  }, [boardKey]);
+  useEffect(() => () => solver.current?.terminate(), []);
+
   // ---- RUN HEIST ------------------------------------------------------------------------
   const runHeist = useCallback(() => {
     const plan = planRun(stage, settled);
@@ -461,6 +502,8 @@ export function Game({ onExit, onEnding }: { onExit: () => void; onEnding: () =>
           inference={inference}
           photoKind={photo?.kind ?? null}
           routes={{ all: routesFor(stage), found: routes[stageId] ?? [] }}
+          muse={muse}
+          onAskMuse={(l) => void askMuse(l)}
         />
       </main>
 
