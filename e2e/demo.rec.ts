@@ -123,23 +123,50 @@ test("01 landing and prologue", async ({ page }) => {
   await pause(page, 3000);
 });
 
-test("02 stage 3: shape decides the job", async ({ page }) => {
+test("02 stage 3: three ways across, and Muse", async ({ page }) => {
   const s = stageById(3);
-  const cam = first(cameraCandidates(s, s.cameras[0], shape.mug), (p) => p.rotationDeg === 0 && stays(3)(p))!;
+  const mugCam = first(cameraCandidates(s, s.cameras[0], shape.mug), (p) => p.rotationDeg === 0 && stays(3)(p))!;
+  const rulerCam = first(cameraCandidates(s, s.cameras[0], shape.ruler), stays(3))!;
   const bridge = bridgeFor(3, shape.ruler);
+  const weight = first(plateCandidates(s, s.plates[0], shape.mug))!;
+  const hung = first(hookCandidates(s, s.hooks[0], shape.mug))!;
   await openGame(page, 3, "A");
   await steal(page, A.mug);
   await steal(page, A.ruler);
   await place(page, 0, { ...bridge, shape: shape.mug, rotationDeg: 0 }); // mug over the gap: too thick
-  await pause(page, 2000);
-  await place(page, 0, cam); // mug blocks the camera
-  await place(page, 1, bridge); // ruler bridges the gap
+  await pause(page, 1800);
+  await place(page, 0, mugCam);
+  // Ask Muse (live Meta Muse Spark 1.3) for a clue; the engine's facts show first.
+  await clickEl(page, page.locator(".muse").getByRole("button", { name: "Clue" }));
+  await expect(page.locator(".muse-say", { hasText: "“" })).toBeVisible({ timeout: 30_000 });
+  await pause(page, 3500);
+  // Way 1: the ruler as a bridge.
+  await place(page, 1, bridge);
+  await run(page, "win");
+  await pause(page, 1200);
+  await clickEl(page, page.getByRole("button", { name: "Retry ↺" }));
+  // Way 2: ruler on the camera, mug on the far plate lowers the drawbridge.
+  await place(page, 1, rulerCam);
+  await place(page, 0, weight);
   await pause(page, 1200);
   await run(page, "win");
+  await pause(page, 1200);
   await clickEl(page, page.getByRole("button", { name: "Retry ↺" }));
-  // X-ray: rebuild the same plan, then judge it as boxes.
-  await place(page, 0, cam);
-  await place(page, 1, bridge);
+  // Way 3: the mug hangs by its handle.
+  await place(page, 1, rulerCam);
+  await place(page, 0, hung);
+  await pause(page, 1200);
+  await run(page, "win");
+  await pause(page, 1500);
+});
+
+test("02b stage 3: X-ray", async ({ page }) => {
+  const s = stageById(3);
+  await openGame(page, 3, "A");
+  await steal(page, A.mug);
+  await steal(page, A.ruler);
+  await place(page, 0, first(cameraCandidates(s, s.cameras[0], shape.mug), (p) => p.rotationDeg === 0 && stays(3)(p))!);
+  await place(page, 1, bridgeFor(3, shape.ruler));
   await clickEl(page, page.getByRole("button", { name: "X-ray: mask vs box" }));
   await page.mouse.move(1450, 420, { steps: 25 });
   await pause(page, 5000);
@@ -147,7 +174,7 @@ test("02 stage 3: shape decides the job", async ({ page }) => {
 
 test("03 stage 5: only a real hole hangs", async ({ page }) => {
   const s = stageById(5);
-  const hung = first(hookCandidates(s, s.hooks[0], shape.mug), (p) => p.rotationDeg === 0)!;
+  const hung = first(hookCandidates(s, s.hooks[0], shape.mug))!;
   await openGame(page, 5, "A");
   await steal(page, A.mug);
   await steal(page, A.ruler);

@@ -43,9 +43,14 @@ const enc = ["-r", "30", "-c:v", "libx264", "-preset", "medium", "-crf", "18", "
 const ff = (args) => execFileSync("ffmpeg", ["-nostdin", "-v", "error", "-y", ...args], { stdio: "inherit" });
 const parts = [];
 
-async function desktop(name, src, from, to, speed, caption) {
+/** `inset` blows up part of the 1600×900 recording (e.g. Muse's reply) beside the action. */
+async function desktop(name, src, from, to, speed, caption, inset) {
   const out = path.join(WORK, `${parts.length}-${name}.mp4`), cap = path.join(WORK, `${name}.png`);
-  const chain = `[0:v]trim=${from}:${to},setpts=(PTS-STARTPTS)/${speed},scale=${W}:${H}:flags=lanczos,fps=30`;
+  let chain = `[0:v]trim=${from}:${to},setpts=(PTS-STARTPTS)/${speed},fps=30`;
+  if (inset) {
+    const { x, y, w, h, k, at } = inset;
+    chain += `,split[full][z];[z]crop=${w}:${h}:${x}:${y},scale=${Math.round(w * k)}:-2:flags=lanczos,pad=iw+8:ih+8:4:4:color=0x8c52ff[zz];[full]scale=${W}:${H}:flags=lanczos[bg];[bg][zz]overlay=${at[0]}:${at[1]}`;
+  } else chain += `,scale=${W}:${H}:flags=lanczos`;
   if (caption) {
     await pill(caption, cap);
     ff(["-i", src, "-i", cap, "-filter_complex", `${chain}[v];[v][1:v]overlay=(W-w)/2:16`, ...enc, out]);
@@ -74,18 +79,21 @@ async function endCard(name, lines, seconds) {
 }
 
 await desktop("landing", raw("01"), 0, 9, 1, "Steal reality. Escape the sketch.");
-await desktop("prologue", raw("01"), 9, 28.4, 2, "Prologue: your partner Sam is Meta SAM 3.1");
+await desktop("prologue", raw("01"), 9, 29.3, 2.2, "Prologue: your partner Sam is Meta SAM 3.1");
 await phoneClip("phone-photo", 27, 38, "LIVE on an iPhone", ["Snap any real object.", "Tap it, and Sam (Meta SAM 3.1)", "cuts out its exact pixels."]);
 await phoneClip("phone-cut", 54, 74, "Real mask, real numbers", ["The game measures only the shape:", "length, thickness, solidity, holes.", "Confidence and latency are", "straight from the API.", "Drop it on the camera's rays: blocked."]);
-await desktop("stage3", raw("02"), 0, 39, 1.8, "Shape decides the job: chunky blocks cameras, thin slips past lasers");
-await desktop("xray", raw("02"), 39, 46.4, 1, "X-ray: the same plan as bounding boxes fails");
-await desktop("stage5", raw("03"), 0, 33.4, 1.7, "Hooks need a real hole: the mug handle has one, its box doesn't");
-await desktop("stage4", raw("04"), 0, 26, 2.5, "Stage 4: a plate that needs bulk");
-await desktop("stage6", raw("04"), 26, 62, 2.5, "Stage 6: a slope that needs rotation");
-await desktop("stage8", raw("04"), 62, 94.9, 2.5, "Stage 8: sensor beams only a thin bar can slip between");
-await desktop("stage10", raw("05"), 0, 51, 3, "Stage 10: everything at once");
-await desktop("ending", raw("05"), 51, 74.2, 1, null);
-await endCard("end", ["PIXEL HEIST", "pixel-heist.vercel.app", "Built with Meta SAM 3.1 · sample desks are AI-generated"], 4);
+await desktop("too-thick", raw("02"), 2, 16, 2, "Shape decides the job: the mug is too thick for the lasers");
+await desktop("muse", raw("02"), 16, 33, 1.1, "Ask Muse (Meta Muse Spark 1.3): it words what the engine worked out", { x: 1240, y: 520, w: 330, h: 250, k: 2.2, at: [24, 330] });
+await desktop("way1", raw("02"), 33, 42, 1.5, "Way 1: a thin bar across the gap");
+await desktop("way2", raw("02"), 42, 60, 2, "Way 2: weight on the far plate lowers the drawbridge");
+await desktop("way3", raw("02"), 60, 87.8, 2, "Way 3: a real hole on the hook. Same gap, three answers");
+await desktop("xray", raw("02b"), 18, 25.7, 1, "X-ray: the same plan as bounding boxes fails");
+await desktop("stage4", raw("04"), 0, 25, 2.8, "Stage 4: a plate that needs bulk");
+await desktop("stage6", raw("04"), 25, 47, 2.8, "Stage 6: a slope that needs rotation");
+await desktop("stage8", raw("04"), 47, 85.8, 2.8, "Stage 8: sensor beams only a thin bar can slip between");
+await desktop("stage10", raw("05"), 0, 50, 3.2, "Stage 10: everything at once");
+await desktop("ending", raw("05"), 50, 72, 1, null);
+await endCard("end", ["PIXEL HEIST", "pixel-heist.vercel.app", "Built with Meta SAM 3.1 + Muse Spark 1.3 · sample desks are AI-generated"], 4);
 
 const list = path.join(WORK, "list.txt");
 writeFileSync(list, parts.map((p) => `file '${path.resolve(p)}'`).join("\n"));
