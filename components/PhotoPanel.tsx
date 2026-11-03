@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { boxToImagePixel, containRect } from "@/lib/coords";
 import type { Photo } from "@/lib/loot";
 import { SAM_LABEL, type ChatMessage } from "@/lib/sam-voice";
+import { SAMPLES, type SampleId } from "@/lib/samples";
 import type { Inference, SegmentState } from "./Game";
 
 type Props = {
@@ -14,7 +15,7 @@ type Props = {
   seg: SegmentState;
   chat: ChatMessage[];
   onLoadFile: (f: File) => void;
-  onTrySample: () => void;
+  onTrySample: (id: SampleId) => void;
   onClick: (pt: { x: number; y: number }, mod: "new" | "add" | "remove") => void;
   onRefine: () => void;
   onClearPending: () => void;
@@ -97,8 +98,14 @@ export function PhotoPanel(props: Props) {
         <div className="dropzone">
           <button className="btn" onClick={() => fileInput.current?.click()}>⇪ Upload a photo</button>
           <span className="muted">or</span>
-          <button className="btn btn-pick" onClick={props.onTrySample}>Try Sample Desk</button>
-          <p className="fineprint">The sample desk is an AI-generated image, not a photo.</p>
+          <div className="row">
+            {(Object.keys(SAMPLES) as SampleId[]).map((id) => (
+              <button key={id} className="btn btn-pick" onClick={() => props.onTrySample(id)}>
+                Try Sample {SAMPLES[id].label}
+              </button>
+            ))}
+          </div>
+          <p className="fineprint">Sample desks are AI-generated images, not photos.</p>
           {props.photoError && <p className="error">{props.photoError}</p>}
         </div>
       ) : (
@@ -126,7 +133,14 @@ export function PhotoPanel(props: Props) {
                 Recorded
               </button>
             </div>
-            <button className="link" onClick={() => fileInput.current?.click()}>New photo</button>
+            <span className="row tight">
+              {photo.kind === "sample" && (
+                <button className="link" onClick={() => props.onTrySample(photo.sampleId === "a" ? "b" : "a")}>
+                  {photo.sampleId === "a" ? SAMPLES.b.label : SAMPLES.a.label}
+                </button>
+              )}
+              <button className="link" onClick={() => fileInput.current?.click()}>New photo</button>
+            </span>
           </div>
 
           <SamThread chat={props.chat} typing={seg.kind === "LOADING"} />

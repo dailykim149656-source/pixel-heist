@@ -3,6 +3,7 @@
 import { fitWithin } from "./coords";
 import { boxShape, maskFromAlpha, normalizeShape, type Mask, type Shape } from "./geometry";
 import type { PromptPoint, SegmentResponse, SegmentSuccess } from "./segment-types";
+import { SAMPLES, type SampleId } from "./samples";
 import { MAX_LOOT } from "./stage";
 
 /** Item in the player's inventory (PRD §6.2). Placement lives in the game state, not here. */
@@ -26,6 +27,7 @@ export type Photo = {
   height: number;
   image: HTMLImageElement;
   kind: "sample" | "upload";
+  sampleId?: SampleId;
 };
 
 export const SPRITE_RES = 2;
@@ -33,7 +35,7 @@ const MAX_SIDE = 2048;
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 /** EXIF-rotate, cap at 2048px and re-encode as JPEG (PRD §7.2 step 0). */
-export async function normalizePhoto(file: Blob, kind: Photo["kind"]): Promise<Photo> {
+export async function normalizePhoto(file: Blob, kind: Photo["kind"], sampleId?: SampleId): Promise<Photo> {
   if (!/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error("Use a JPG, PNG or WebP image.");
   if (file.size > MAX_UPLOAD_BYTES) throw new Error("Image is over 10MB.");
   const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
@@ -47,7 +49,7 @@ export async function normalizePhoto(file: Blob, kind: Photo["kind"]): Promise<P
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("encode failed"))), "image/jpeg", 0.9),
   );
   const url = URL.createObjectURL(blob);
-  return { url, blob, width: size.width, height: size.height, image: await loadImage(url), kind };
+  return { url, blob, width: size.width, height: size.height, image: await loadImage(url), kind, sampleId };
 }
 
 export function loadImage(src: string): Promise<HTMLImageElement> {
@@ -147,23 +149,26 @@ type SampleFixture = {
   maskUrl: string;
 };
 
-const SAMPLE_FIXTURES = ["mug", "ruler"];
-let sampleFixtures: Promise<SampleFixture[]> | null = null;
+const sampleFixtures = new Map<SampleId, Promise<SampleFixture[]>>();
 
-function loadSampleFixtures() {
-  sampleFixtures ??= Promise.all(
-    SAMPLE_FIXTURES.map(async (name) => {
+function loadSampleFixtures(id: SampleId) {
+  if (!sampleFixtures.has(id))
+    sampleFixtures.set(
+      id,
+      Promise.all(
+        SAMPLES[id].fixtures.map(async (name) => {
       const meta = await (await fetch(`/sample/${name}/fixture.json`)).json();
       const maskUrl = `/sample/${name}/mask.png`;
-      return { ...meta, maskUrl, mask: (await readMask(maskUrl)).mask } as SampleFixture;
-    }),
-  );
-  return sampleFixtures;
+          return { ...meta, maskUrl, mask: (await readMask(maskUrl)).mask } as SampleFixture;
+        }),
+      ),
+    );
+  return sampleFixtures.get(id)!;
 }
 
 /** Precomputed path: return the recorded SAM result whose mask contains the click (PRD FR-10). */
-export async function segmentSample(point: { x: number; y: number }): Promise<SegmentResponse> {
-  for (const f of await loadSampleFixtures()) {
+export async function segmentSample(id: SampleId, point: { x: number; y: number }): Promise<SegmentResponse> {
+  for (const f of await loadSampleFixtures(id)) {
     const lx = point.x - f.sourceBbox.x, ly = point.y - f.sourceBbox.y;
     if (lx >= 0 && ly >= 0 && lx < f.mask.width && ly < f.mask.height && f.mask.data[ly * f.mask.width + lx]) {
       const blob = await (await fetch(f.maskUrl)).blob();

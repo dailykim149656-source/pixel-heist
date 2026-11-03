@@ -24,10 +24,10 @@ async function worldPoint(page: Page, x: number, y: number) {
   return { x: b.x + (x / 960) * b.width, y: b.y + (y / 540) * b.height };
 }
 
-async function startSample(page: Page) {
+async function startSample(page: Page, desk: "A" | "B" = "A") {
   await page.goto("/");
   await page.getByRole("button", { name: "▶ Play" }).click();
-  await page.getByRole("button", { name: "Try Sample Desk" }).click();
+  await page.getByRole("button", { name: `Try Sample Desk ${desk}` }).click();
   await expect(page.locator(".photo-box img")).toBeVisible();
 }
 
@@ -150,4 +150,26 @@ test("X-ray: the winning ruler bridge is a laser-tripping slab as a bounding box
   await expect(gapRow.locator("td").nth(1)).toHaveText("trips lasers");
   // The real game still uses the mask: the mission stays done.
   await expect(mission(page, "Bridge the gap")).toHaveClass(/done/);
+});
+
+test("Desk B: a different photo, a different solution — calculator on the camera, pen over the gap", async ({ page }) => {
+  await startSample(page, "B");
+  await page.getByRole("radio", { name: "Recorded" }).click();
+
+  // The scissors are a decoy: their open handles make them too thick for the lasers.
+  await steal(page, { x: 872, y: 860 });
+  await dropLoot(page, 0, 495, 400, 73);
+  await expect(mission(page, "Bridge the gap")).not.toHaveClass(/done/);
+  await expect(page.locator(".why")).toContainText("Too thick");
+  await page.locator(".slot-x").first().click();
+
+  await steal(page, { x: 1140, y: 448 }); // calculator
+  await steal(page, { x: 688, y: 700 }); // pen
+  await dropLoot(page, 0, 410, 200, 180);
+  await expect(mission(page, "Block the camera")).toHaveClass(/done/);
+  await dropLoot(page, 1, 495, 418, 19);
+  await expect(mission(page, "Bridge the gap")).toHaveClass(/done/);
+
+  await page.getByRole("button", { name: /RUN HEIST/ }).click();
+  await expect(page.getByText("ESCAPE SUCCESS!")).toBeVisible({ timeout: 10_000 });
 });

@@ -8,6 +8,7 @@ import { buildPreview, extractLoot, normalizePhoto, segmentLive, segmentSample, 
 import { SEGMENT_ERROR_TEXT, type PromptPoint, type SegmentErrorCode } from "@/lib/segment-types";
 import { samBagged, samError, samGreeting, samRecordedMiss, samReply, yourRequest, type ChatMessage } from "@/lib/sam-voice";
 import { FLOOR_Y, MAX_LOOT, ROTATE_STEP_DEG, THIEF, WORLD } from "@/lib/stage";
+import { SAMPLES, type SampleId } from "@/lib/samples";
 import type { Scene } from "@/lib/draw";
 import { LootBar } from "./LootBar";
 import { MissionPanel } from "./MissionPanel";
@@ -52,11 +53,11 @@ export function Game({ onExit }: { onExit: () => void }) {
   const byId = useMemo(() => new Map(loot.map((l) => [l.id, l])), [loot]);
 
   // ---- photo + segmentation -------------------------------------------------------------
-  const loadPhoto = useCallback(async (file: Blob, kind: Photo["kind"]) => {
+  const loadPhoto = useCallback(async (file: Blob, kind: Photo["kind"], sampleId?: SampleId) => {
     setPhotoError(null);
     setSeg({ kind: "IDLE" });
     try {
-      const p = await normalizePhoto(file, kind);
+      const p = await normalizePhoto(file, kind, sampleId);
       setPhoto((old) => {
         if (old) URL.revokeObjectURL(old.url);
         return p;
@@ -69,10 +70,13 @@ export function Game({ onExit }: { onExit: () => void }) {
     }
   }, [say]);
 
-  const trySample = useCallback(async () => {
-    const blob = await (await fetch("/sample/desk.png")).blob();
-    await loadPhoto(blob, "sample");
-  }, [loadPhoto]);
+  const trySample = useCallback(
+    async (id: SampleId) => {
+      const blob = await (await fetch(`/sample/${SAMPLES[id].image}`)).blob();
+      await loadPhoto(blob, "sample", id);
+    },
+    [loadPhoto],
+  );
 
   const segment = useCallback(
     async (points: PromptPoint[]) => {
@@ -80,10 +84,16 @@ export function Game({ onExit }: { onExit: () => void }) {
       const refining = points.length > 1;
       setSeg({ kind: "LOADING", points });
       say("you", yourRequest(points, refining));
-      const res = inference === "LIVE_API" ? await segmentLive(photo, points) : await segmentSample(points[0]);
+      const res =
+        inference === "LIVE_API" || !photo.sampleId ? await segmentLive(photo, points) : await segmentSample(photo.sampleId, points[0]);
       if (!res.ok) {
         setSeg({ kind: res.code === "NO_OBJECT" ? "EMPTY_RESULT" : "ERROR", code: res.code, message: res.message, points });
-        say("sam", inference === "PRECOMPUTED_SAMPLE" && res.code === "NO_OBJECT" ? samRecordedMiss() : samError(res.code, photo.kind === "sample"));
+        say(
+          "sam",
+          inference === "PRECOMPUTED_SAMPLE" && res.code === "NO_OBJECT" && photo.sampleId
+            ? samRecordedMiss(SAMPLES[photo.sampleId].fixtures.length)
+            : samError(res.code, photo.kind === "sample"),
+        );
         return;
       }
       try {
@@ -344,7 +354,7 @@ export function Game({ onExit }: { onExit: () => void }) {
           seg={seg}
           chat={chat}
           onLoadFile={(f) => void loadPhoto(f, "upload")}
-          onTrySample={() => void trySample()}
+          onTrySample={(id) => void trySample(id)}
           onClick={onPhotoClick}
           onRefine={refine}
           onClearPending={() => seg.kind === "PREVIEW" && setSeg({ ...seg, pending: [] })}

@@ -18,7 +18,12 @@ npm run dev                  # http://localhost:3000
 npm test                     # geometry, judging, coordinates, Sam's lines
 ```
 
-Without a key, choose **Recorded** in the photo panel to replay the sample desk's recorded SAM results.
+Without a key, choose **Recorded** in the photo panel to replay the recorded SAM results for the two sample desks.
+
+**Two desks, two solutions.** On Desk A the mug guards the camera and the diagonal ruler bridges the gap.
+On Desk B the calculator (or sticky note) guards the camera and the pen bridges. The scissors look useful,
+but their open finger holes make them too thick for the lasers. Same rules, different objects:
+`tests/desk-b.test.ts` checks this on the real masks.
 
 ## How it works
 
@@ -37,7 +42,7 @@ Without a key, choose **Recorded** in the photo panel to replay the sample desk'
 
 - **LIVE** means a real SAM 3.1 call made just now. **RECORDED** replays real SAM 3.1 responses captured on 2026-11-03
   (`fixtures/sam/`, with provenance). No mask is hand-made.
-- The sample desk image is **AI-generated** (ChatGPT image generation), not a photograph.
+- Both sample desk images are **AI-generated** (ChatGPT image generation), not photographs.
 - No user image is stored. The server keeps an in-memory cache only.
 
 ## Known limitations

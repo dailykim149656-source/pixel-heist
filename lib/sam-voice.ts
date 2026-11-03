@@ -60,8 +60,8 @@ export function samError(code: SegmentErrorCode, recordedAvailable: boolean): Om
   return { text: text[code], tone: code === "NO_OBJECT" ? "warn" : "error" };
 }
 
-export function samRecordedMiss(): Omit<ChatMessage, "id" | "from"> {
-  return { text: "I only have recorded cuts for the mug and the ruler. Switch me to LIVE to try that spot.", tone: "warn" };
+export function samRecordedMiss(recordedCount: number): Omit<ChatMessage, "id" | "from"> {
+  return { text: `I only recorded ${recordedCount} cuts on this desk, and that spot isn't one. Switch me to LIVE to try it.`, tone: "warn" };
 }
 
 export function samBagged(lootCount: number): string {

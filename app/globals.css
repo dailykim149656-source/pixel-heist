@@ -230,3 +230,7 @@ button { font: inherit; color: inherit; }
 .geo-grid .xray-dt, .geo-grid .xray-dd { color: #b35c00; }
 .world-actions .btn { white-space: nowrap; }
 .world-actions .kbd-hint { flex: 1; min-width: 0; line-height: 1.3; }
+.row.tight { margin-top: 0; gap: 10px; }
+.segmented button { white-space: nowrap; }
+.photo-tools { gap: 8px; }
+.photo-tools .row.tight { flex-wrap: nowrap; white-space: nowrap; }
