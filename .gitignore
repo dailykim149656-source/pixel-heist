@@ -13,3 +13,4 @@ samples/ChatGPT Image*
 .vercel
 test-results/
 playwright-report/
+recordings/
