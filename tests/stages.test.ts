@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { planRun } from "@/lib/heist";
-import { judge, judgeGap, judgePlate, placementProblem } from "@/lib/judge";
+import { judge, judgeBeam, judgeGap, judgePlate, placementProblem } from "@/lib/judge";
 import { stageById } from "@/lib/stages";
 import type { Placement } from "@/lib/geometry";
 import { cameraCandidates, first, gapPlacements, hookCandidates, loadFixtureShape, plateCandidates } from "./fixtures";
@@ -126,5 +126,94 @@ describe("Stage 5 — The Hook Hall (hook + gap)", () => {
     const hung = first(hookCandidates(s, hook, B.scissors))!;
     const bridge = first(gapPlacements(s, s.gaps[0], B.pen), bridges(5))!;
     expect(win(5, [hung, bridge]).outcome).toBe("WON");
+  });
+});
+
+/** Camera spots that also keep every sensor beam clear. */
+const clearOfBeams = (stageId: number) => (p: Placement) => stageById(stageId).beams.every((b) => !judgeBeam(b, [p]).tripped);
+
+describe("Stage 6 — The Split Level (sloped gap)", () => {
+  const s = stageById(6);
+  it("a flat bar can't climb: every unrotated bridge fails, a turned one works", () => {
+    for (const shape of [A.ruler, B.pen]) {
+      expect(first(gapPlacements(s, s.gaps[0], shape), (p) => p.rotationDeg === 0 && bridges(6)(p))).toBeNull();
+      const p = first(gapPlacements(s, s.gaps[0], shape), bridges(6));
+      expect(p).not.toBeNull();
+      expect(p!.rotationDeg).not.toBe(0);
+    }
+  });
+  it("desk A: mug on the camera, ruler turned to match the slope", () => {
+    const cam = first(cameraCandidates(s, s.cameras[0], A.mug))!;
+    const bridge = first(gapPlacements(s, s.gaps[0], A.ruler), bridges(6))!;
+    expect(win(6, [cam]).outcome).toBe("FELL");
+    expect(win(6, [cam, bridge]).outcome).toBe("WON");
+  });
+});
+
+describe("Stage 7 — The Twin Watch (two cameras + gap)", () => {
+  const s = stageById(7);
+  it("one blocked camera isn't enough", () => {
+    const cam1 = first(cameraCandidates(s, s.cameras[0], A.mug))!;
+    const bridge = first(gapPlacements(s, s.gaps[0], A.ruler), bridges(7))!;
+    expect(win(7, [cam1, bridge]).outcome).toBe("CAUGHT");
+  });
+  it("mixing desks: mug and calculator on the cameras, ruler over the gap", () => {
+    const cam1 = first(cameraCandidates(s, s.cameras[0], A.mug))!;
+    const cam2 = first(cameraCandidates(s, s.cameras[1], B.calculator))!;
+    const bridge = first(gapPlacements(s, s.gaps[0], A.ruler), bridges(7))!;
+    expect(win(7, [cam1, cam2, bridge]).outcome).toBe("WON");
+  });
+});
+
+describe("Stage 8 — The Tripwire (beams + camera + gap)", () => {
+  const s = stageById(8);
+  it("between the beams, chunky shapes almost never fit; thin bars fit easily", () => {
+    const spots = (shape: typeof A.mug) => [...cameraCandidates(s, s.cameras[0], shape)].filter(clearOfBeams(8)).length;
+    for (const shape of [A.mug, B.calculator, B.sticky]) expect(spots(shape)).toBeLessThan(20);
+    for (const shape of [A.ruler, B.pen]) expect(spots(shape)).toBeGreaterThan(200);
+  });
+  it("touching a beam sets off the alarm", () => {
+    const cam = first(cameraCandidates(s, s.cameras[0], A.mug), (p) => !clearOfBeams(8)(p))!;
+    const bridge = first(gapPlacements(s, s.gaps[0], B.pen), bridges(8))!;
+    expect(win(8, [cam, bridge])).toMatchObject({ outcome: "CAUGHT", reason: expect.stringMatching(/sensor beam/) });
+  });
+  it("two thin bars from two desks: ruler threads the beams, pen bridges the gap", () => {
+    const cam = first(cameraCandidates(s, s.cameras[0], A.ruler), clearOfBeams(8))!;
+    const bridge = first(gapPlacements(s, s.gaps[0], B.pen), bridges(8))!;
+    expect(win(8, [cam, bridge]).outcome).toBe("WON");
+  });
+});
+
+describe("Stage 9 — The Counterweight (plate + steep gap + camera)", () => {
+  const s = stageById(9);
+  it("only the slimmest bar makes the steep climb", () => {
+    expect(first(gapPlacements(s, s.gaps[0], B.pen), bridges(9))).not.toBeNull();
+    expect(first(gapPlacements(s, s.gaps[0], A.ruler), bridges(9))).toBeNull();
+  });
+  it("mug on the plate, calculator on the camera, pen up the stair", () => {
+    const pl = first(plateCandidates(s, s.plates[0], A.mug))!;
+    const cam = first(cameraCandidates(s, s.cameras[0], B.calculator), (p) => !judgePlate(s.plates[0], [p]).coverage)!;
+    const bridge = first(gapPlacements(s, s.gaps[0], B.pen), bridges(9))!;
+    expect(win(9, [cam, bridge]).outcome).toBe("STUCK");
+    expect(win(9, [pl, cam, bridge]).outcome).toBe("WON");
+  });
+});
+
+describe("Stage 10 — The Grand Vault (hook + two cameras + steep gap)", () => {
+  const s = stageById(10);
+  it("desk B alone: scissors on the hook, calculator and sticky note on the cameras, pen up the stair", () => {
+    const hung = first(hookCandidates(s, s.hooks[0], B.scissors))!;
+    const cam1 = first(cameraCandidates(s, s.cameras[0], B.calculator))!;
+    const cam2 = first(cameraCandidates(s, s.cameras[1], B.sticky))!;
+    const bridge = first(gapPlacements(s, s.gaps[0], B.pen), bridges(10))!;
+    expect(win(10, [cam1, cam2, bridge]).outcome).toBe("STUCK");
+    expect(win(10, [hung, cam1, cam2, bridge]).outcome).toBe("WON");
+  });
+  it("both desks: mug on the hook, ruler and calculator on the cameras, pen up the stair", () => {
+    const hung = first(hookCandidates(s, s.hooks[0], A.mug))!;
+    const cam1 = first(cameraCandidates(s, s.cameras[0], A.ruler))!;
+    const cam2 = first(cameraCandidates(s, s.cameras[1], B.calculator))!;
+    const bridge = first(gapPlacements(s, s.gaps[0], B.pen), bridges(10))!;
+    expect(win(10, [hung, cam1, cam2, bridge]).outcome).toBe("WON");
   });
 });

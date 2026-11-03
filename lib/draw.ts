@@ -92,6 +92,7 @@ export function drawScene(canvas: HTMLCanvasElement, scene: Scene) {
   stage.hooks.forEach((h) => drawHook(ctx, h, stage));
   stage.doors.forEach((d) => drawDoor(ctx, d.x, floorY(stage, d.x), scene.live.doors[d.id]));
   stage.gaps.forEach((g, i) => drawLasers(ctx, g, scene.live.gaps[i].tripsLaser));
+  stage.beams.forEach((b, i) => drawBeam(ctx, b, scene.live.beams[i]));
   stage.cameras.forEach((c, i) => {
     drawRays(ctx, c, scene.live.cameras[i].rays);
     drawCamera(ctx, c);
@@ -173,6 +174,39 @@ function drawLasers(ctx: CanvasRenderingContext2D, g: Gap, tripped: boolean) {
     ctx.lineTo(g.right + 2, g.yRight + off);
     ctx.stroke();
   }
+}
+
+const BEAM = "#d63aa0";
+
+/** Sensor beam: an emitter, a receiver and a dashed wire; flashes where something touches it. */
+function drawBeam(ctx: CanvasRenderingContext2D, b: Stage["beams"][number], r: Judgement["beams"][number]) {
+  ctx.save();
+  ctx.strokeStyle = r.tripped ? ALERT : BEAM;
+  ctx.lineWidth = r.tripped ? 3 : 2;
+  ctx.setLineDash([10, 5]);
+  ctx.beginPath();
+  ctx.moveTo(b.x0, b.y0);
+  ctx.lineTo(b.x1, b.y1);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = "#efe3ea";
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.5;
+  for (const [x, y] of [[b.x0, b.y0], [b.x1, b.y1]]) {
+    roundRect(ctx, x - 6, y - 9, 12, 18, 3);
+    ctx.fill();
+    ctx.stroke();
+  }
+  if (r.at) {
+    ctx.fillStyle = "rgba(216, 55, 43, 0.35)";
+    ctx.beginPath();
+    ctx.arc(r.at.x, r.at.y, 14, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.font = `16px ${handFont()}`;
+    ctx.fillStyle = ALERT;
+    ctx.fillText("ALARM!", r.at.x + 12, r.at.y - 12);
+  }
+  ctx.restore();
 }
 
 function drawWalkSpan(ctx: CanvasRenderingContext2D, g: Gap, r: Judgement["gaps"][number]) {

@@ -80,6 +80,7 @@ const SHORT_LABEL: Record<string, string> = {
   "Bridge the gap": "Gap",
   "Weigh down the plate": "Plate",
   "Hang something on the hook": "Hook",
+  "Keep the beam clear": "Beam",
 };
 
 function XrayVerdict({ mask, box }: { mask: Mission[]; box: Mission[] }) {

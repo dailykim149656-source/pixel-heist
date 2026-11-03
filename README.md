@@ -50,8 +50,13 @@ real SAM cuts and checks that the wrong shapes fail.
 | 3 | The Gallery | Both at once; one object can't do both | mug + ruler | calculator + pen |
 | 4 | The Weigh Station | A plate that needs bulk (thin bars and loops fail) | mug + ruler | sticky note + calculator |
 | 5 | The Hook Hall | A hook that only catches a real hole in the mask | mug handle + ruler | scissor loop + pen |
+| 6 | The Split Level | Sloped gap: the bridge must be turned to climb | mug + ruler (rotated) | calculator + pen (rotated) |
+| 7 | The Twin Watch | Two cameras + gap, need 6/7 rays each — more loot than one desk | mug + calculator + ruler (both desks) | calculator + sticky + pen |
+| 8 | The Tripwire | Sensor beams nothing may touch: only thin bars fit between them | ruler on the camera + pen over the gap (both desks) | — |
+| 9 | The Counterweight | Plate + steeper climb + camera; only the slimmest bar climbs | mug on the plate + calculator + pen (both desks) | sticky + calculator + pen |
+| 10 | The Grand Vault | Hook + two cameras + steep climb, then the ending comic | mug + ruler + calculator + pen (both desks) | scissors + calculator + sticky + pen |
 
-Progress is remembered in the browser. Stages 6–10 are planned.
+Progress is remembered in the browser. Clearing stage 10 unlocks the ending comic.
 
 ## Honesty notes
 

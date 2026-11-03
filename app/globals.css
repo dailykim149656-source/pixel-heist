@@ -336,3 +336,10 @@ button { font: inherit; color: inherit; }
   .speech, .comic-caption { font-size: 14px; }
 }
 .small-screen .btn { margin-top: 12px; }
+
+/* ---------- ending ---------- */
+.comic-finale {
+  position: absolute; left: 0; right: 0; bottom: 8%; margin: 0; text-align: center; color: #fff3b0;
+  font: clamp(20px, 2.4vw, 34px) var(--font-hand), cursive; letter-spacing: 1px; animation: pop 900ms 1.6s ease-out both;
+}
+.prologue.is-ending .comic-panel:last-child.on { background: #26221e; }

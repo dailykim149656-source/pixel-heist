@@ -28,6 +28,9 @@ export function planRun(stage: Stage, j: Judgement): RunPlan {
     const opener = stage.plates.some((p) => p.opens === d.id) ? "weigh down the plate" : "hang something on the hook";
     events.push({ x: d.x - 26, fail: j.doors[d.id] ? null : { outcome: "STUCK", stopX: d.x - 26, reason: `The door is shut — ${opener} to open it` } });
   }
+  stage.beams.forEach((b, i) => {
+    if (j.beams[i].tripped) events.push({ x: -Infinity, fail: { outcome: "CAUGHT", stopX: THIEF.startX + 20, reason: "Alarm! Something is touching the sensor beam" } });
+  });
   events.sort((a, b) => a.x - b.x);
   for (const e of events) if (e.fail) return e.fail;
   return { outcome: "WON", stopX: stage.vaultX - 40, reason: null };

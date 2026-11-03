@@ -29,7 +29,7 @@ type Drag = { id: string; rotationDeg: number; grab: { dx: number; dy: number };
 
 const PROGRESS_KEY = "pixel-heist.unlocked";
 
-export function Game({ onExit }: { onExit: () => void }) {
+export function Game({ onExit, onEnding }: { onExit: () => void; onEnding: () => void }) {
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [inference, setInference] = useState<Inference>("LIVE_API");
@@ -465,6 +465,7 @@ export function Game({ onExit }: { onExit: () => void }) {
           stageName={stage.name}
           nextStage={STAGES.find((st) => st.id === stageId + 1) ?? null}
           onNext={() => goToStage(stageId + 1)}
+          onEnding={stageId === STAGES.length ? onEnding : null}
           onRetry={resetRun}
           onNewPhoto={() => {
             resetAll();

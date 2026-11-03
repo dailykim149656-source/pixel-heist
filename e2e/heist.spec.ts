@@ -1,6 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { stageById } from "../lib/stages";
-import { cameraCandidates, first, hookCandidates, loadFixtureShape, plateCandidates } from "../tests/fixtures";
+import { judge, placementProblem, snapPlacement } from "../lib/judge";
+import type { Placement } from "../lib/geometry";
+import { cameraCandidates, first, gapPlacements, hookCandidates, loadFixtureShape, plateCandidates } from "../tests/fixtures";
 
 /**
  * Sample-mode end-to-end runs (PRD §9, §13). Recorded SAM cuts are used, so no live API calls;
@@ -28,7 +30,7 @@ async function worldPoint(page: Page, x: number, y: number) {
 
 async function startSample(page: Page, desk: "A" | "B" = "A", stage = 3) {
   // Unlock stages up front so each spec can jump straight to the one it tests.
-  await page.addInitScript(() => localStorage.setItem("pixel-heist.unlocked", "5"));
+  await page.addInitScript(() => localStorage.setItem("pixel-heist.unlocked", "10"));
   await page.goto("/");
   await page.getByRole("button", { name: "▶ Play the Heist" }).click();
   await page.getByRole("button", { name: "Skip ⏭" }).click();
@@ -52,6 +54,19 @@ async function dropLoot(page: Page, index: number, cx: number, cy: number, itemH
   await page.mouse.move(slot.x + slot.width / 2, slot.y + slot.height / 2);
   await page.mouse.down();
   await page.mouse.move(target.x, target.y, { steps: 12 });
+  await page.mouse.up();
+}
+
+/** Like dropLoot, but turns the item (R = +15°) mid-drag first. */
+async function dropLootTurned(page: Page, index: number, p: Placement) {
+  const slot = (await page.locator(".slot-grab").nth(index).boundingBox())!;
+  const target = await worldPoint(page, p.x, p.y - p.shape.grid.height / 2 + 10);
+  await page.mouse.move(slot.x + slot.width / 2, slot.y + slot.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x, target.y, { steps: 12 });
+  for (let i = 0; i < p.rotationDeg / 15; i++) await page.keyboard.press("r");
+  await page.mouse.move(target.x + 1, target.y, { steps: 2 });
+  await page.mouse.move(target.x, target.y, { steps: 2 });
   await page.mouse.up();
 }
 
@@ -244,5 +259,40 @@ test("Watch Prologue replays the comic and Skip returns to the landing page", as
   await expect(page.getByText("Pencil cameras, pencil lasers", { exact: false })).toBeHidden();
   await expect(page.locator(".comic-panel.on")).toHaveCount(1);
   await page.getByRole("button", { name: "Skip ⏭" }).click();
+  await expect(page.getByRole("button", { name: "▶ Play the Heist" })).toBeVisible();
+});
+
+test("Stage 10 with Desk B alone, then the ending comic ends on a cliffhanger", async ({ page }) => {
+  const s = stageById(10);
+  const shape = { pen: loadFixtureShape("d2-pen"), calc: loadFixtureShape("d2-calculator"), sticky: loadFixtureShape("d2-sticky"), scissors: loadFixtureShape("d2-scissors") };
+  // Spots the drop won't re-snap, so the dragged item lands exactly where the solver put it.
+  const stays = (p: Placement) => { const q = snapPlacement(s, p); return q.x === p.x && q.y === p.y; };
+  const hung = first(hookCandidates(s, s.hooks[0], shape.scissors))!;
+  const cam1 = first(cameraCandidates(s, s.cameras[0], shape.calc), stays)!;
+  const cam2 = first(cameraCandidates(s, s.cameras[1], shape.sticky), stays)!;
+  const bridge = first(gapPlacements(s, s.gaps[0], shape.pen), (p) => !placementProblem(s, p) && judge(s, [p]).gaps[0].bridged)!;
+
+  await startSample(page, "B", 10);
+  await page.getByRole("radio", { name: "Recorded" }).click();
+  await steal(page, { x: 872, y: 860 }); // scissors
+  await steal(page, { x: 1140, y: 448 }); // calculator
+  await steal(page, { x: 1160, y: 900 }); // sticky note
+  await steal(page, { x: 688, y: 700 }); // pen
+  await dropLootTurned(page, 0, hung);
+  await dropLootTurned(page, 1, cam1);
+  await dropLootTurned(page, 2, cam2);
+  await dropLootTurned(page, 3, bridge);
+  await expect(mission(page, "Hang something on the hook")).toHaveClass(/done/);
+  await expect(mission(page, "Bridge the gap")).toHaveClass(/done/);
+  await expect(page.locator(".checklist li.done", { hasText: "Block the camera" })).toHaveCount(2);
+
+  await page.getByRole("button", { name: /RUN HEIST/ }).click();
+  await expect(page.getByText("ESCAPE SUCCESS!")).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Watch the ending ▶" }).click();
+  for (let i = 0; i < 5; i++) await page.getByRole("button", { name: "Next ▸" }).click();
+  await expect(page.getByText("To be continued...?")).toBeVisible();
+  await expect(page.getByText("The museum hired me first", { exact: false })).toBeVisible();
+  if (process.env.SHOT) await page.waitForTimeout(2500), await page.screenshot({ path: process.env.SHOT });
+  await page.getByRole("button", { name: "Back to the start ↺" }).click();
   await expect(page.getByRole("button", { name: "▶ Play the Heist" })).toBeVisible();
 });

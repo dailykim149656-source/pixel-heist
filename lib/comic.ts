@@ -4,10 +4,10 @@ import rough from "roughjs";
 import type { RoughCanvas } from "roughjs/bin/canvas";
 import { ALERT, INK, PAPER, PICK } from "./draw";
 
-/** Pencil doodles for the prologue comic (one 480×320 panel each). Speech is HTML, not canvas. */
+/** Pencil doodles for the prologue and ending comics (one 480×320 panel each). Speech is HTML, not canvas. */
 export const PANEL = { width: 480, height: 320 } as const;
 
-type Pen = { ctx: CanvasRenderingContext2D; rc: RoughCanvas; seed: number };
+export type Pen = { ctx: CanvasRenderingContext2D; rc: RoughCanvas; seed: number };
 const pencil = (seed: number, more: object = {}) => ({ stroke: INK, strokeWidth: 1.6, roughness: 1.4, seed, ...more });
 
 export function drawPanel(canvas: HTMLCanvasElement, draw: (pen: Pen) => void, seed: number) {
@@ -20,7 +20,7 @@ export function drawPanel(canvas: HTMLCanvasElement, draw: (pen: Pen) => void, s
 }
 
 /** The thief, matching the in-game figure: beret, round head, loot bag. */
-export function thief(pen: Pen, x: number, y: number, s = 1.6, pose: "stand" | "phone" | "point" | "sneak" = "stand") {
+export function thief(pen: Pen, x: number, y: number, s = 1.6, pose: "stand" | "phone" | "point" | "sneak" | "cheer" | "sit" | "hold" = "stand") {
   const { ctx } = pen;
   ctx.save();
   ctx.translate(x, y);
@@ -29,8 +29,15 @@ export function thief(pen: Pen, x: number, y: number, s = 1.6, pose: "stand" | "
   ctx.lineWidth = 3;
   ctx.lineCap = "round";
   const legs = pose === "sneak" ? 10 : 7;
-  seg(ctx, 0, -30, -legs, 0);
-  seg(ctx, 0, -30, legs, 0);
+  if (pose === "sit") {
+    seg(ctx, 0, -30, 16, -28);
+    seg(ctx, 16, -28, 18, 0);
+    seg(ctx, 0, -30, 12, -26);
+    seg(ctx, 12, -26, 10, 0);
+  } else {
+    seg(ctx, 0, -30, -legs, 0);
+    seg(ctx, 0, -30, legs, 0);
+  }
   seg(ctx, 0, -30, 2, -55);
   if (pose === "phone") {
     seg(ctx, 1, -50, 10, -58);
@@ -39,10 +46,16 @@ export function thief(pen: Pen, x: number, y: number, s = 1.6, pose: "stand" | "
     ctx.fillRect(9, -74, 7, 12);
   } else if (pose === "point") {
     seg(ctx, 1, -50, 26, -60);
+  } else if (pose === "cheer") {
+    seg(ctx, 1, -50, 16, -78);
+  } else if (pose === "hold") {
+    seg(ctx, 1, -50, 18, -50);
+    seg(ctx, 18, -50, 20, -58);
   } else {
     seg(ctx, 1, -50, 14, -36);
   }
-  seg(ctx, 1, -50, -14, -36);
+  if (pose === "cheer") seg(ctx, 1, -50, -12, -76);
+  else seg(ctx, 1, -50, -14, -36);
   ctx.fillStyle = PAPER;
   ctx.beginPath();
   ctx.arc(3, -66, 11, 0, Math.PI * 2);
@@ -198,6 +211,54 @@ export function maskVsBox(pen: Pen, x: number, y: number) {
   const c = Math.cos(-0.5), s = Math.sin(-0.5);
   const hw = Math.abs(90 * c) + Math.abs(9 * s), hh = Math.abs(90 * s) + Math.abs(9 * c);
   rc.rectangle(x - hw, y - hh, hw * 2, hh * 2, { ...pencil(seed), stroke: "#ff8c00", strokeWidth: 2.2, strokeLineDash: [8, 6] });
+}
+
+/** Prison bars across a rectangle, with a crossbar. */
+export function bars(pen: Pen, x: number, y: number, w: number, h: number, n = 7) {
+  const p = pencil(pen.seed, { strokeWidth: 3 });
+  for (let i = 0; i <= n; i++) pen.rc.line(x + (i * w) / n, y, x + (i * w) / n, y + h, p);
+  pen.rc.line(x, y + 8, x + w, y + 8, p);
+  pen.rc.line(x, y + h * 0.55, x + w, y + h * 0.55, p);
+}
+
+/** Alarm lights: red wedges fanning out of a dome. */
+export function siren(pen: Pen, x: number, y: number) {
+  const { ctx, rc, seed } = pen;
+  ctx.fillStyle = "rgba(216, 55, 43, 0.18)";
+  for (const a of [-2.4, -0.7]) {
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.arc(x, y, 160, a - 0.35, a + 0.35);
+    ctx.fill();
+  }
+  rc.arc(x, y + 6, 36, 36, Math.PI, Math.PI * 2, true, pencil(seed, { fill: ALERT, fillStyle: "solid" }));
+}
+
+/** The Muse charm: a small star pendant on a cord, glowing faintly. */
+export function charm(pen: Pen, x: number, y: number, s = 1, glow = true) {
+  const { ctx, rc, seed } = pen;
+  if (glow) {
+    const g = ctx.createRadialGradient(x, y, 4, x, y, 70 * s);
+    g.addColorStop(0, "rgba(140, 82, 255, 0.45)");
+    g.addColorStop(1, "rgba(140, 82, 255, 0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, 70 * s, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  rc.line(x, y - 22 * s, x - 8 * s, y - 60 * s, pencil(seed, { strokeWidth: 1.2 }));
+  const pts: [number, number][] = [];
+  for (let i = 0; i < 10; i++) {
+    const r = (i % 2 ? 9 : 22) * s, a = -Math.PI / 2 + (i * Math.PI) / 5;
+    pts.push([x + r * Math.cos(a), y + r * Math.sin(a)]);
+  }
+  rc.polygon(pts, pencil(seed + 1, { fill: "#d9c6ff", fillStyle: "solid", stroke: PICK, strokeWidth: 2 }));
+}
+
+/** Fill the panel with night: the cliffhanger's last frame. */
+export function darkness(pen: Pen) {
+  pen.ctx.fillStyle = "#26221e";
+  pen.ctx.fillRect(0, 0, PANEL.width, PANEL.height);
 }
 
 function seg(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number) {

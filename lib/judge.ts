@@ -1,6 +1,6 @@
 import { anyOccupied, gridToWorld, holeAt, occupiedBounds, type Placement } from "./geometry";
 import { GAP_TOLERANCE, SNAP_RANGE, THIEF, VAULT_SIZE, WORLD } from "./stage";
-import type { Camera, Gap, Hook, Plate, Stage } from "./stages";
+import type { Beam, Camera, Gap, Hook, Plate, Stage } from "./stages";
 
 /**
  * Puzzle judging from mask geometry only (PRD §3.4). Nothing here knows what an object is called.
@@ -21,11 +21,13 @@ export type GapResult = {
 };
 export type PlateResult = { id: string; covered: boolean; coverage: number; need: number };
 export type HookResult = { id: string; hung: boolean };
+export type BeamResult = { id: string; tripped: boolean; at: { x: number; y: number } | null };
 export type Judgement = {
   cameras: CameraResult[];
   gaps: GapResult[];
   plates: PlateResult[];
   hooks: HookResult[];
+  beams: BeamResult[];
   /** Door id → open. */
   doors: Record<string, boolean>;
 };
@@ -127,6 +129,15 @@ export function judgeHook(h: Hook, placements: readonly Placement[]): HookResult
   return { id: h.id, hung: placements.some((p) => holeAt(p, h.x, h.y)) };
 }
 
+export function judgeBeam(b: Beam, placements: readonly Placement[]): BeamResult {
+  const len = Math.hypot(b.x1 - b.x0, b.y1 - b.y0);
+  for (let d = 0; d <= len; d += RAY_STEP) {
+    const x = b.x0 + ((b.x1 - b.x0) * d) / len, y = b.y0 + ((b.y1 - b.y0) * d) / len;
+    if (anyOccupied(placements, x, y)) return { id: b.id, tripped: true, at: { x, y } };
+  }
+  return { id: b.id, tripped: false, at: null };
+}
+
 export function judge(stage: Stage, placements: readonly Placement[]): Judgement {
   const plates = stage.plates.map((p) => judgePlate(p, placements));
   const hooks = stage.hooks.map((h) => judgeHook(h, placements));
@@ -139,6 +150,7 @@ export function judge(stage: Stage, placements: readonly Placement[]): Judgement
     gaps: stage.gaps.map((g) => judgeGap(g, placements)),
     plates,
     hooks,
+    beams: stage.beams.map((b) => judgeBeam(b, placements)),
     doors,
   };
 }
@@ -164,6 +176,15 @@ export function missionList(stage: Stage, j: Judgement): Mission[] {
       done: j.hooks[i].hung,
       detail: j.hooks[i].hung ? "Hanging" : "Needs an object with a real hole",
       hint: "Only a loop or a handle can catch the hook. Drop the hole right onto it.",
+    }),
+  );
+  stage.beams.forEach((b, i) =>
+    m.push({
+      id: b.id,
+      label: "Keep the beam clear",
+      done: !j.beams[i].tripped,
+      detail: j.beams[i].tripped ? "Something is touching the beam" : "Nothing touches it",
+      hint: "The sensor beam sounds the alarm if anything touches it. Fit your blocker above or below it.",
     }),
   );
   stage.cameras.forEach((c, i) =>

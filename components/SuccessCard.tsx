@@ -10,11 +10,13 @@ type Props = {
   stageName: string;
   nextStage: Stage | null;
   onNext: () => void;
+  /** Set after the final stage: the ending comic. */
+  onEnding: (() => void) | null;
   onRetry: () => void;
   onNewPhoto: () => void;
 };
 
-export function SuccessCard({ seconds, extractions, used, stageName, nextStage, onNext, onRetry, onNewPhoto }: Props) {
+export function SuccessCard({ seconds, extractions, used, stageName, nextStage, onNext, onEnding, onRetry, onNewPhoto }: Props) {
   const mm = String(Math.floor(seconds / 60)).padStart(2, "0"), ss = String(seconds % 60).padStart(2, "0");
   return (
     <div className="success-backdrop" role="dialog" aria-label="Escape success">
@@ -42,6 +44,11 @@ export function SuccessCard({ seconds, extractions, used, stageName, nextStage, 
           {nextStage && (
             <button className="btn btn-primary" onClick={onNext}>
               Next: {nextStage.name} →
+            </button>
+          )}
+          {onEnding && (
+            <button className="btn btn-primary" onClick={onEnding}>
+              Watch the ending ▶
             </button>
           )}
           <button className="btn" onClick={onRetry}>Retry ↺</button>
