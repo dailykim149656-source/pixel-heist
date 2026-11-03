@@ -104,7 +104,12 @@ export function judgeGap(g: Gap, placements: readonly Placement[]): GapResult {
 
   const spans = span >= spanNeeded;
   let reason: string | null = null;
-  if (tripsLaser) reason = `Too thick — trips the lasers (needs ≤ ${g.slotAbove + g.slotBelow}px, this is ${thickness}px)`;
+  // Thin enough but sitting off the walk line is a placement problem, not a shape problem.
+  if (tripsLaser)
+    reason =
+      thickness > g.slotAbove + g.slotBelow
+        ? `Too thick — trips the lasers (needs ≤ ${g.slotAbove + g.slotBelow}px, this is ${thickness}px)`
+        : "Thin enough, but it's off the walk line and touching a laser — lay it flat across the two ledges";
   else if (!spans) reason = span === 0 ? "Nothing spans the gap" : `Doesn't span both ledges (${span}/${spanNeeded}px)`;
   return { id: g.id, bridged: spans && !tripsLaser, span, spanNeeded, tripsLaser, thickness, reason, lowered: false };
 }
@@ -263,7 +268,9 @@ export function placementProblem(stage: Stage, p: Placement): string | null {
 }
 
 const HOOK_SNAP = 28;
-const GAP_CENTER_SNAP = 48;
+const GAP_CENTER_SNAP = 80;
+/** How far above or below a gap's walk line an item mostly over the gap is pulled down onto it. */
+const GAP_DROP_SNAP = 110;
 
 /**
  * Snaps (PRD §3.2 step 7). Only position changes — whether the result works is still decided by
@@ -281,8 +288,11 @@ export function snapPlacement(stage: Stage, p: Placement): Placement {
   for (const g of stage.gaps) {
     if (b.right < g.left - g.support || b.left > g.right + g.support) continue;
     const gapCenter = (g.left + g.right) / 2, itemCenter = (b.left + b.right) / 2;
-    if (Math.abs(itemCenter - gapCenter) <= GAP_CENTER_SNAP) q = { ...q, x: q.x + gapCenter - itemCenter };
-    return restOn(q, (x) => (x >= g.left - g.support && x <= g.right + g.support ? gapLineY(g, x) : null));
+    const over = Math.abs(itemCenter - gapCenter) <= GAP_CENTER_SNAP;
+    if (over) q = { ...q, x: q.x + gapCenter - itemCenter };
+    // Dropped over the gap: settle onto the ledges even from well above (a finger on a phone
+    // can't hit a 13px window). Near but not over it, only a short reach, so camera blockers stay put.
+    return restOn(q, (x) => (x >= g.left - g.support && x <= g.right + g.support ? gapLineY(g, x) : null), over ? GAP_DROP_SNAP : undefined);
   }
   for (const pl of stage.plates) {
     if (b.right < pl.x || b.left > pl.x + pl.width) continue;
@@ -292,7 +302,7 @@ export function snapPlacement(stage: Stage, p: Placement): Placement {
 }
 
 /** Move the item vertically so its lowest point rests on `surface`, if it's already close. */
-function restOn(p: Placement, surface: (x: number) => number | null): Placement {
+function restOn(p: Placement, surface: (x: number) => number | null, reach = SNAP_RANGE + WALK_ABOVE): Placement {
   const t = (p.rotationDeg * Math.PI) / 180, c = Math.cos(t), s = Math.sin(t);
   const g = p.shape.grid;
   let dy = Infinity;
@@ -304,6 +314,6 @@ function restOn(p: Placement, surface: (x: number) => number | null): Placement 
       const sy = surface(wx);
       if (sy !== null) dy = Math.min(dy, sy - wy);
     }
-  if (!Number.isFinite(dy) || Math.abs(dy) > SNAP_RANGE + WALK_ABOVE) return p;
+  if (!Number.isFinite(dy) || Math.abs(dy) > reach) return p;
   return { ...p, y: p.y + dy };
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { planRun } from "@/lib/heist";
-import { judge, judgeBeam, judgeGap, judgePlate, placementProblem } from "@/lib/judge";
+import { judge, judgeBeam, judgeGap, judgePlate, placementProblem, snapPlacement } from "@/lib/judge";
 import { stageById } from "@/lib/stages";
 import type { Placement } from "@/lib/geometry";
 import { cameraCandidates, first, gapPlacements, hookCandidates, loadFixtureShape, plateCandidates } from "./fixtures";
@@ -235,5 +235,24 @@ describe("Stage 10 — The Grand Vault (hook + two cameras + steep gap)", () => 
     const cam2 = first(cameraCandidates(s, s.cameras[1], B.calculator))!;
     const bridge = first(gapPlacements(s, s.gaps[0], B.pen), bridges(10))!;
     expect(win(10, [hung, cam1, cam2, bridge]).outcome).toBe("WON");
+  });
+});
+
+describe("dropping a bar over a gap", () => {
+  it("settles onto the ledges even from 100px above (phones), and says why when it can't", () => {
+    for (const id of [2, 8]) {
+      const s = stageById(id), g = s.gaps[0], mid = (g.left + g.right) / 2;
+      for (const shape of [A.ruler, B.pen])
+        for (const [dx, dy] of [[0, -100], [40, -60], [-60, -20], [0, 15]]) {
+          const p = snapPlacement(s, { shape, x: mid + dx, y: g.yLeft + dy, rotationDeg: 0 });
+          expect(judgeGap(g, [p]), `stage ${id} drop ${dx},${dy}`).toMatchObject({ bridged: true });
+        }
+    }
+  });
+  it("a thin bar left hovering isn't called too thick", () => {
+    const g = stageById(2).gaps[0];
+    const r = judgeGap(g, [{ shape: A.ruler, x: 495, y: g.yLeft - 60, rotationDeg: 0 }]);
+    expect(r.tripsLaser).toBe(true);
+    expect(r.reason).toMatch(/off the walk line/);
   });
 });
