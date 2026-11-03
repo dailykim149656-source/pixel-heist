@@ -152,6 +152,7 @@ export function PhotoPanel(props: Props) {
                 <dt>Aspect</dt><dd>{m.aspect.toFixed(1)} : 1</dd>
                 <dt>Longest run</dt><dd>{m.longestUnbrokenSpanPx}px</dd>
                 <dt>Straightened</dt><dd>{preview.shape.deskewDeg ? `${Math.round(preview.shape.deskewDeg)}°` : "—"}</dd>
+                <dt className="xray-dt">Box only</dt><dd className="xray-dd">{preview.box.grid.width}×{preview.box.grid.height}px, solid</dd>
               </dl>
               <p className="geo-meta">
                 SAM confidence {preview.seg.confidence?.toFixed(2) ?? "n/a"} · {preview.seg.latencyMs}ms

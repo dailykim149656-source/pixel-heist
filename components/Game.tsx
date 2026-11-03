@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { occupiedAt, type Placement } from "@/lib/geometry";
+import { boxPlacement, occupiedAt, type Placement } from "@/lib/geometry";
 import { judge, placementProblem, snapToLedges } from "@/lib/judge";
 import { planRun, runDurationMs, RUN_SPEED_PX_PER_S, type GameState, type RunPlan } from "@/lib/heist";
 import { buildPreview, extractLoot, normalizePhoto, segmentLive, segmentSample, type LootItem, type Photo, type Preview } from "@/lib/loot";
@@ -42,6 +42,7 @@ export function Game({ onExit }: { onExit: () => void }) {
   const [finishedAt, setFinishedAt] = useState<number | null>(null);
   const worldRef = useRef<HTMLCanvasElement>(null);
   const [chat, setChat] = useState<ChatMessage[]>([]);
+  const [xray, setXray] = useState(false);
   const chatId = useRef(0);
   const say = useCallback((from: ChatMessage["from"], msg: string | Omit<ChatMessage, "id" | "from">) => {
     const body = typeof msg === "string" ? { text: msg } : msg;
@@ -150,6 +151,12 @@ export function Game({ onExit }: { onExit: () => void }) {
   );
 
   const settled = useMemo(() => judge(placedList.map((p) => p.placement)), [placedList]);
+  // X-ray: the same placements judged as box-only colliders (what you'd get without SAM's mask).
+  const boxes = useMemo(
+    () => (xray ? placedList.map(({ id, placement }) => boxPlacement(placement, byId.get(id)!.box)) : []),
+    [xray, placedList, byId],
+  );
+  const boxJudged = useMemo(() => (xray ? judge(boxes) : null), [xray, boxes]);
   const live = useMemo(
     () => (candidate ? judge([...placedList.map((p) => p.placement), candidate]) : settled),
     [candidate, placedList, settled],
@@ -312,6 +319,7 @@ export function Game({ onExit }: { onExit: () => void }) {
     live,
     missions,
     thief,
+    xray: boxJudged ? { boxes, judged: boxJudged } : null,
   };
 
   const usedItems = placedList.map((p) => byId.get(p.id)!);
@@ -348,9 +356,12 @@ export function Game({ onExit }: { onExit: () => void }) {
         <section className="world-col">
           <SketchWorld ref={worldRef} scene={scene} onPointerDown={startDragFromWorld} dragging={!!drag} />
           <div className="world-actions">
-            <button className="btn" onClick={() => rotate(-1)} disabled={!editable || (!drag && !(selected && placed[selected]))}>⟲ Rotate</button>
-            <button className="btn" onClick={() => rotate(1)} disabled={!editable || (!drag && !(selected && placed[selected]))}>Rotate ⟳</button>
-            <span className="kbd-hint">R / Shift+R · Del removes</span>
+            <button className="btn" onClick={() => rotate(-1)} aria-label="Rotate left" title="Rotate left (Shift+R)" disabled={!editable || (!drag && !(selected && placed[selected]))}>⟲</button>
+            <button className="btn" onClick={() => rotate(1)} aria-label="Rotate right" title="Rotate right (R)" disabled={!editable || (!drag && !(selected && placed[selected]))}>⟳</button>
+            <button className={`btn btn-xray${xray ? " on" : ""}`} onClick={() => setXray((v) => !v)} aria-pressed={xray} title="Judge the same placements as plain bounding boxes, as if there were no SAM mask">
+              X-ray: mask vs box
+            </button>
+            <span className="kbd-hint">Rotate: R / Shift+R · Del removes</span>
             {gameState === "CAUGHT" || gameState === "FELL" ? (
               <button className="btn btn-primary" onClick={resetRun}>Try again ↺</button>
             ) : (
@@ -364,6 +375,7 @@ export function Game({ onExit }: { onExit: () => void }) {
         <MissionPanel
           missions={missions}
           settled={settled}
+          boxJudged={boxJudged}
           gameState={gameState}
           failure={run && run.plan.outcome !== "WON" && gameState !== "RUNNING" ? run.plan.reason : null}
           hasLoot={loot.length > 0}

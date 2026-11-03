@@ -217,3 +217,16 @@ button { font: inherit; color: inherit; }
 .bubble.typing span:nth-child(2) { animation-delay: 0.15s; }
 .bubble.typing span:nth-child(3) { animation-delay: 0.3s; }
 @keyframes blink { 50% { opacity: 0.25; } }
+
+/* ---------- X-ray: mask vs box ---------- */
+.btn-xray { font-size: 15px; border-color: #ff8c00; }
+.btn-xray.on { background: #ffe2bf; }
+.xray-card { margin-top: 12px; border: 1.5px dashed #ff8c00; border-radius: 6px; padding: 8px 10px; background: #fff6ea; }
+.xray-title { font: 16px var(--font-hand), cursive; color: #b35c00; }
+.xray-card table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 4px; }
+.xray-card th, .xray-card td { text-align: left; padding: 2px 4px; }
+.xray-card thead th { color: var(--ink-soft); font-weight: 600; }
+.xray-card td.diff { color: #b35c00; font-weight: 700; }
+.geo-grid .xray-dt, .geo-grid .xray-dd { color: #b35c00; }
+.world-actions .btn { white-space: nowrap; }
+.world-actions .kbd-hint { flex: 1; min-width: 0; line-height: 1.3; }

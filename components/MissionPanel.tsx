@@ -8,6 +8,7 @@ import type { Inference } from "./Game";
 type Props = {
   missions: { cameraBlocked: boolean; gapBridged: boolean; vaultReached: boolean };
   settled: Judgement;
+  boxJudged: Judgement | null;
   gameState: GameState;
   failure: string | null;
   hasLoot: boolean;
@@ -16,7 +17,7 @@ type Props = {
   photoKind: "sample" | "upload" | null;
 };
 
-export function MissionPanel({ missions, settled, gameState, failure, hasLoot, hasPhoto, inference, photoKind }: Props) {
+export function MissionPanel({ missions, settled, boxJudged, gameState, failure, hasLoot, hasPhoto, inference, photoKind }: Props) {
   const hint = !hasPhoto
     ? "Load a photo, then click an object to steal it."
     : !hasLoot
@@ -39,6 +40,8 @@ export function MissionPanel({ missions, settled, gameState, failure, hasLoot, h
         />
         <Check done={missions.vaultReached} label="Reach the vault" />
       </ul>
+
+      {boxJudged && <XrayVerdict mask={settled} box={boxJudged} />}
 
       {failure && (
         <div className="notice notice-error" role="alert">
@@ -63,6 +66,26 @@ export function MissionPanel({ missions, settled, gameState, failure, hasLoot, h
         {photoKind === "sample" && <span className="fineprint">Sample desk is AI-generated</span>}
       </div>
     </aside>
+  );
+}
+
+function XrayVerdict({ mask, box }: { mask: Judgement; box: Judgement }) {
+  const rays = (j: Judgement) => `${j.camera.blockedCount}/${CAMERA.rayCount}`;
+  const gap = (j: Judgement) => (j.gap.bridged ? "bridged" : j.gap.tripsLaser ? "trips lasers" : "no span");
+  return (
+    <div className="xray-card">
+      <span className="xray-title">X-ray · same placement</span>
+      <table>
+        <thead>
+          <tr><th /><th>SAM mask</th><th>Box only</th></tr>
+        </thead>
+        <tbody>
+          <tr><th>Camera</th><td>{rays(mask)}</td><td className={box.camera.blocked !== mask.camera.blocked ? "diff" : ""}>{rays(box)}</td></tr>
+          <tr><th>Gap</th><td>{gap(mask)}</td><td className={box.gap.bridged !== mask.gap.bridged ? "diff" : ""}>{gap(box)}</td></tr>
+        </tbody>
+      </table>
+      <p className="fineprint">Without the mask, a diagonal ruler is just its bounding box — too thick for the lasers. With boxes this level can&apos;t be solved.</p>
+    </div>
   );
 }
 

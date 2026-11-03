@@ -29,6 +29,9 @@ Without a key, choose **Recorded** in the photo panel to replay the sample desk'
   unbroken 154px span thin enough (≤ 48px) to pass between the lasers. The mug can block the camera
   but can never bridge. The ruler can do either. See `tests/judge.test.ts`, which runs on real SAM masks.
 - `lib/stage.ts` holds the numbers that both the drawing and the judge use.
+- **X-ray (mask vs box):** a toggle re-judges the same placements as plain bounding boxes, the colliders you'd
+  get without a segmentation mask. The diagonal ruler's box is a slab that trips the lasers. With boxes the level is
+  unsolvable, and `tests/xray.test.ts` checks that claim on the real SAM masks.
 
 ## Honesty notes
 

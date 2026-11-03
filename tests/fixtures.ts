@@ -1,13 +1,24 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { PNG } from "pngjs";
-import { maskFromAlpha, normalizeShape, type Placement, type Shape } from "@/lib/geometry";
+import { boxShape, maskFromAlpha, normalizeShape, type Placement, type Shape } from "@/lib/geometry";
 import { snapToLedges } from "@/lib/judge";
 import { GAP, FLOOR_Y, ROTATE_STEP_DEG, WORLD } from "@/lib/stage";
 
-export function loadFixtureShape(name: string): Shape {
+function loadFixtureMask(name: string) {
   const png = PNG.sync.read(readFileSync(path.join("fixtures/sam", name, "mask.png")));
-  return normalizeShape(maskFromAlpha(png.width, png.height, png.data, 4));
+  return maskFromAlpha(png.width, png.height, png.data, 4);
+}
+
+export function loadFixtureShape(name: string): Shape {
+  return normalizeShape(loadFixtureMask(name));
+}
+
+/** The cut-out plus the bounding box a box-only detector would give for the same pixels (X-ray). */
+export function loadFixtureWithBox(name: string): { shape: Shape; box: Shape } {
+  const mask = loadFixtureMask(name);
+  const shape = normalizeShape(mask);
+  return { shape, box: boxShape(mask, shape.toSource.scale) };
 }
 
 export const ROTATIONS = Array.from({ length: 180 / ROTATE_STEP_DEG }, (_, i) => i * ROTATE_STEP_DEG);

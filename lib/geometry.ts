@@ -176,3 +176,38 @@ export function occupiedBounds(p: Placement) {
         }
   return { left, right, top, bottom };
 }
+
+/**
+ * What a box-only detector would give us: the mask's axis-aligned bounding box in photo space,
+ * fully solid and never straightened (without a mask there is no shape to find an axis from).
+ * It uses the cut-out's own scale, so in the world it encloses exactly the same pixels.
+ */
+export function boxShape(mask: Mask, scale: number): Shape {
+  const width = Math.max(1, Math.round(mask.width * scale));
+  const height = Math.max(1, Math.round(mask.height * scale));
+  const grid = { width, height, data: new Uint8Array(width * height).fill(1) };
+  return {
+    grid,
+    deskewDeg: 0,
+    anisotropy: Math.max(width, height) / Math.min(width, height),
+    toSource: { scale, minX: -mask.width / 2, minY: -mask.height / 2, cx: mask.width / 2, cy: mask.height / 2, thetaRad: 0 },
+    metrics: shapeMetrics(grid),
+  };
+}
+
+/** Where the bounding box sits in the world when the cut-out `shape` is placed at `p`. */
+export function boxPlacement(p: Placement, box: Shape): Placement {
+  const t = p.shape.toSource;
+  // Box center in mask coords → the cut-out's grid (see normalizeShape) → world.
+  const dx = box.toSource.cx - t.cx, dy = box.toSource.cy - t.cy;
+  const c = Math.cos(t.thetaRad), s = Math.sin(t.thetaRad);
+  const gx = t.scale * (dx * c - dy * s - t.minX) - p.shape.grid.width / 2;
+  const gy = t.scale * (dx * s + dy * c - t.minY) - p.shape.grid.height / 2;
+  const r = (p.rotationDeg * Math.PI) / 180;
+  return {
+    shape: box,
+    x: p.x + gx * Math.cos(r) - gy * Math.sin(r),
+    y: p.y + gx * Math.sin(r) + gy * Math.cos(r),
+    rotationDeg: p.rotationDeg + (t.thetaRad * 180) / Math.PI,
+  };
+}

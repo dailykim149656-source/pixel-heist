@@ -136,3 +136,18 @@ test("T04/T11: Sam explains API failures and the game keeps going", async ({ pag
   await steal(page, MUG);
   await expect(page.locator(".slot-grab")).toHaveCount(1);
 });
+
+test("X-ray: the winning ruler bridge is a laser-tripping slab as a bounding box", async ({ page }) => {
+  await startSample(page);
+  await page.getByRole("radio", { name: "Recorded" }).click();
+  await steal(page, RULER);
+  await dropLoot(page, 0, 495, 418, 25);
+  await expect(mission(page, "Bridge the gap")).toHaveClass(/done/);
+
+  await page.getByRole("button", { name: "X-ray: mask vs box" }).click();
+  const gapRow = page.locator(".xray-card tr", { hasText: "Gap" });
+  await expect(gapRow.locator("td").nth(0)).toHaveText("bridged");
+  await expect(gapRow.locator("td").nth(1)).toHaveText("trips lasers");
+  // The real game still uses the mask: the mission stays done.
+  await expect(mission(page, "Bridge the gap")).toHaveClass(/done/);
+});

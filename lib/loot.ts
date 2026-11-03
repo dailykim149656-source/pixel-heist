@@ -1,7 +1,7 @@
 "use client";
 
 import { fitWithin } from "./coords";
-import { maskFromAlpha, normalizeShape, type Mask, type Shape } from "./geometry";
+import { boxShape, maskFromAlpha, normalizeShape, type Mask, type Shape } from "./geometry";
 import type { PromptPoint, SegmentResponse, SegmentSuccess } from "./segment-types";
 import { MAX_LOOT } from "./stage";
 
@@ -10,6 +10,8 @@ export type LootItem = {
   id: string;
   origin: SegmentSuccess["origin"];
   shape: Shape;
+  /** Bounding box of the same pixels, for the X-ray comparison. */
+  box: Shape;
   /** Cutout pre-rendered at 2× game resolution in the deskewed frame. */
   sprite: HTMLCanvasElement;
   thumbUrl: string;
@@ -73,6 +75,7 @@ export type Preview = {
   seg: SegmentSuccess;
   mask: Mask;
   shape: Shape;
+  box: Shape;
   cutout: HTMLCanvasElement; // bbox-sized RGBA, original pixels
   points: PromptPoint[];
 };
@@ -88,7 +91,8 @@ export async function buildPreview(photo: Photo, seg: SegmentSuccess, points: Pr
   const img = ctx.getImageData(0, 0, width, height);
   for (let i = 0; i < mask.data.length; i++) img.data[i * 4 + 3] = mask.data[i] ? 255 : 0;
   ctx.putImageData(img, 0, 0);
-  return { seg, mask, shape: normalizeShape(mask), cutout, points };
+  const shape = normalizeShape(mask);
+  return { seg, mask, shape, box: boxShape(mask, shape.toSource.scale), cutout, points };
 }
 
 let nextId = 1;
@@ -111,6 +115,7 @@ export function extractLoot(preview: Preview): LootItem {
     id: `loot_${nextId++}`,
     origin: preview.seg.origin,
     shape,
+    box: preview.box,
     sprite,
     thumbUrl: sprite.toDataURL("image/png"),
     confidence: preview.seg.confidence,

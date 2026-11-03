@@ -12,6 +12,7 @@ export const PAPER = "#f7f1e6";
 export const ALERT = "#d8372b";
 export const OK = "#5fae3c";
 export const PICK = "#8c52ff";
+export const XRAY = "#ff8c00";
 
 type Sprite = { placement: Placement; sprite: HTMLCanvasElement };
 
@@ -21,7 +22,8 @@ export type Scene = {
   live: Judgement; // includes the candidate
   missions: { cameraBlocked: boolean; gapBridged: boolean };
   thief: { x: number; y: number; pose: "idle" | "run" | "caught" | "fell" | "won"; t: number };
-  highlightId?: string;
+  /** X-ray: box-only colliders for the same placements, and how they'd be judged. */
+  xray: { boxes: Placement[]; judged: Judgement } | null;
 };
 
 let statics: Drawable[] | null = null;
@@ -84,6 +86,7 @@ export function drawScene(canvas: HTMLCanvasElement, scene: Scene) {
     outline(ctx, scene.candidate.placement, scene.candidate.status);
   }
   drawWalkSpan(ctx, scene.live);
+  if (scene.xray) drawXray(ctx, scene.xray);
   drawThief(ctx, scene.thief);
   stickers(ctx, scene.missions);
 }
@@ -170,6 +173,35 @@ function drawWalkSpan(ctx: CanvasRenderingContext2D, j: Judgement) {
   ctx.lineTo(from + j.gap.span, FLOOR_Y - 2);
   ctx.stroke();
   ctx.lineCap = "butt";
+}
+
+function drawXray(ctx: CanvasRenderingContext2D, x: NonNullable<Scene["xray"]>) {
+  ctx.save();
+  for (const b of x.boxes) {
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    ctx.rotate((b.rotationDeg * Math.PI) / 180);
+    const w = b.shape.grid.width, h = b.shape.grid.height;
+    ctx.fillStyle = "rgba(255, 140, 0, 0.16)";
+    ctx.fillRect(-w / 2, -h / 2, w, h);
+    ctx.strokeStyle = XRAY;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.strokeRect(-w / 2, -h / 2, w, h);
+    ctx.restore();
+  }
+  // Where the box would stop each ray.
+  ctx.fillStyle = XRAY;
+  for (const r of x.judged.camera.rays)
+    if (r.blockedAt) {
+      ctx.beginPath();
+      ctx.arc(r.blockedAt.x, r.blockedAt.y, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  ctx.font = `18px ${handFont()}`;
+  ctx.fillStyle = "#b35c00";
+  ctx.fillText("X-RAY — orange = bounding box only", 14, 26);
+  ctx.restore();
 }
 
 function drawSprite(ctx: CanvasRenderingContext2D, { placement: p, sprite }: Sprite, alpha: number) {
