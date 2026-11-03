@@ -1,0 +1,40 @@
+{
+  "origin": "PRECOMPUTED_SAMPLE",
+  "provenance": {
+    "model": "sam-3.1",
+    "endpoint": "https://api.meta.ai/v1/responses",
+    "capturedAt": "2026-11-03T04:10:34.270Z",
+    "sourceFile": "ChatGPT Image Nov 3, 2026, 01_09_19 PM-3.png",
+    "latencyMs": 1488,
+    "outcome": {
+      "status": "completed"
+    },
+    "diagnostics": 0
+  },
+  "prompt": {
+    "text": "<0f>1<|point;x=1100;y=624;w=1448;h=1086|>",
+    "point": {
+      "x": 1100,
+      "y": 624
+    }
+  },
+  "sourceDimensions": {
+    "width": 1448,
+    "height": 1086
+  },
+  "sourceBbox": {
+    "x": 899,
+    "y": 547,
+    "width": 523,
+    "height": 140
+  },
+  "confidence": 0.9609375,
+  "maskEncoding": "lossless",
+  "fill": 0.40764818355640536,
+  "checks": {
+    "rasterMatchesMaskSize": true,
+    "maskCoversBounds": true,
+    "boundsInsideImage": true,
+    "clickedPixelInMask": true
+  }
+}

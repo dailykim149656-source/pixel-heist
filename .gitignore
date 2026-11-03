@@ -1,0 +1,12 @@
+node_modules/
+.env.local
+._*
+.DS_Store
+.next/
+next-env.d.ts
+public/sample/
+*.tsbuildinfo
+
+# Original AI-generated candidates; samples/desk.png is the shipped one, fixtures keep their own source.jpg
+samples/ChatGPT Image*
+.claude/settings.local.json
