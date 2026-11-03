@@ -70,3 +70,8 @@ Progress is remembered in the browser. Clearing stage 10 unlocks the ending comi
 - Desktop and phone browsers. On phones the sketch stays pinned at the top and the loot bag at the bottom, so cut-outs drag straight from one to the other; photos can come from the camera or the photo library.
 - One stage.
 - Object size is normalized and never claims real-world size or weight.
+
+## Sound
+
+Music, sound effects and the comic voices (the thief, Sam) were generated with ElevenLabs
+(public/audio). The 🔊 button mutes everything; nothing plays before the first click.

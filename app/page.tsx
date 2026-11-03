@@ -18,6 +18,8 @@ export default function Page() {
         ending
         title="Ending · The Double Cross"
         panels={ENDING}
+        voices="end"
+        music="ending"
         doneLabel="Back to the start ↺"
         onDone={() => setScreen("landing")}
         onSkip={() => setScreen("landing")}
@@ -29,6 +31,8 @@ export default function Page() {
     <Comic
       title="Prologue · The Call"
       panels={PROLOGUE}
+      voices="pro"
+      music="bgm"
       doneLabel={screen === "replay" ? "▶ Play the Heist" : "▶ Start the heist"}
       onDone={() => setScreen("game")}
       onSkip={() => setScreen(screen === "replay" ? "landing" : "game")}

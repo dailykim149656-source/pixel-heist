@@ -9,6 +9,8 @@ import { SEGMENT_ERROR_TEXT, type PromptPoint, type SegmentErrorCode } from "@/l
 import { samBagged, samError, samGreeting, samRecordedMiss, samReply, yourRequest, type ChatMessage } from "@/lib/sam-voice";
 import { MAX_LOOT, ROTATE_STEP_DEG, THIEF, WORLD } from "@/lib/stage";
 import { STAGES, stageById, type Stage } from "@/lib/stages";
+import { footsteps, playMusic, sfx } from "@/lib/audio";
+import { SoundToggle } from "./SoundToggle";
 import { compileRoom, judgeRoom, lootForCurator, type RoomSpec } from "@/lib/curator";
 import { CuratorCard, type CuratorState } from "./CuratorCard";
 import { hintFacts, plainHint, type HintLevel, type PlanFacts } from "@/lib/hints";
@@ -158,6 +160,7 @@ export function Game({ onExit, onEnding }: { onExit: () => void; onEnding: () =>
     if (seg.kind !== "PREVIEW" || loot.length >= MAX_LOOT) return;
     const item = extractLoot(seg.preview);
     setLoot((l) => [...l, item]);
+    sfx("snip");
     setSelected(item.id);
     setExtractions((n) => n + 1);
     setSeg({ kind: "IDLE" });
@@ -260,6 +263,7 @@ export function Game({ onExit, onEnding }: { onExit: () => void; onEnding: () =>
     const up = () => {
       if (candidate && !candidateProblem) {
         setPlaced((p) => ({ ...p, [drag.id]: { x: candidate.x, y: candidate.y, rotationDeg: candidate.rotationDeg } }));
+        sfx("drop");
       } else {
         // Off the sketch or on a forbidden spot: back to the loot bar, nothing lost (FR-05).
         setPlaced(({ [drag.id]: _, ...rest }) => rest);
@@ -410,6 +414,28 @@ export function Game({ onExit, onEnding }: { onExit: () => void; onEnding: () =>
   }, [boardKey]);
   useEffect(() => () => solver.current?.terminate(), []);
 
+  // ---- Sound -----------------------------------------------------------------------------
+  useEffect(() => {
+    playMusic("bgm");
+    return () => footsteps(false);
+  }, []);
+  // Devices react audibly when a drop changes them: lasers trip, drawbridges fall, gates lift.
+  const prevSettled = useRef(settled);
+  useEffect(() => {
+    const before = prevSettled.current;
+    prevSettled.current = settled;
+    if (before.gaps.length !== settled.gaps.length) return; // a new stage, not a change
+    if (settled.gaps.some((g, i) => g.tripsLaser && !before.gaps[i].tripsLaser)) sfx("laser", 0.6);
+    if (settled.beams.some((b, i) => b.tripped && !before.beams[i]?.tripped)) sfx("laser", 0.6);
+    if (settled.gaps.some((g, i) => g.lowered && !before.gaps[i].lowered)) sfx("drawbridge");
+    if (Object.keys(settled.doors).some((d) => settled.doors[d] && !before.doors[d])) sfx("gate");
+  }, [settled]);
+  useEffect(() => {
+    footsteps(gameState === "RUNNING");
+    const cue = { WON: "win", CAUGHT: "alarm", FELL: "fall", STUCK: "drop" } as const;
+    if (gameState in cue) sfx(cue[gameState as keyof typeof cue]);
+  }, [gameState]);
+
   // ---- RUN HEIST ------------------------------------------------------------------------
   const runHeist = useCallback(() => {
     const plan = planRun(stage, settled);
@@ -534,6 +560,7 @@ export function Game({ onExit, onEnding }: { onExit: () => void; onEnding: () =>
         >
           ✦ Curator&apos;s Challenge
         </button>
+        <SoundToggle />
         <button className="icon-btn" onClick={resetAll} title="Start over">↺</button>
       </header>
       {curator && <CuratorCard state={curator} onEnter={enterRoom} onClose={() => setCurator(null)} />}

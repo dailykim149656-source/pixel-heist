@@ -1,26 +1,65 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { playMusic, sfx, soundOn, stopVoice, voice, type Track } from "@/lib/audio";
 import { drawPanel, PANEL } from "@/lib/comic";
+import { SoundToggle } from "./SoundToggle";
 import type { ComicPanel } from "@/lib/comic-scripts";
 
 /** A pencil comic page that reveals one panel at a time (prologue and ending). */
 
 const AUTO_MS = 4200;
 
-type Props = { title: string; panels: ComicPanel[]; onDone: () => void; onSkip: () => void; doneLabel: string; ending?: boolean };
+type Props = {
+  title: string;
+  panels: ComicPanel[];
+  /** Voice files are public/audio/vo/<voices>-<panel>-<bubble>.mp3. */
+  voices: "pro" | "end";
+  music: Track;
+  onDone: () => void;
+  onSkip: () => void;
+  doneLabel: string;
+  ending?: boolean;
+};
 
-export function Comic({ title, panels: PANELS, onDone, onSkip, doneLabel, ending }: Props) {
+export function Comic({ title, panels: PANELS, voices, music, onDone, onSkip, doneLabel, ending }: Props) {
   const [shown, setShown] = useState(1);
   const [auto, setAuto] = useState(true);
   const last = shown >= PANELS.length;
   const next = useCallback(() => setShown((n) => Math.min(PANELS.length, n + 1)), []);
 
   useEffect(() => {
-    if (!auto || last) return;
-    const id = setTimeout(next, AUTO_MS);
-    return () => clearTimeout(id);
-  }, [auto, last, shown, next]);
+    playMusic(music);
+    return () => stopVoice();
+  }, [music]);
+
+  // Each new panel: a page whoosh, then its lines read out in order. With sound on, auto-advance
+  // waits for the last line; muted, it keeps the fixed pace.
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const advance = (ms: number) => auto && !last && !cancelled && (timer = setTimeout(next, ms));
+    sfx("panel", 0.5);
+    if (!soundOn()) advance(AUTO_MS);
+    else
+      (async () => {
+        await new Promise((r) => setTimeout(r, 350));
+        const panel = PANELS[shown - 1];
+        let spoke = false;
+        for (const [i, b] of panel.bubbles.entries()) {
+          if (cancelled) return;
+          if (/\w/.test(b.text)) {
+            spoke = true;
+            await voice(`${voices}-${shown}-${i}`);
+          }
+        }
+        advance(spoke ? 900 : 2400); // a silent panel ("...") still needs a beat
+      })();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [auto, last, shown, next, PANELS, voices]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -43,7 +82,10 @@ export function Comic({ title, panels: PANELS, onDone, onSkip, doneLabel, ending
       <header className="prologue-head">
         <span className="logo">PIXEL HEIST</span>
         <span className="prologue-title">{title}</span>
-        <button className="btn btn-small prologue-skip" onClick={onSkip}>Skip ⏭</button>
+        <span className="prologue-skip row tight">
+          <SoundToggle />
+          <button className="btn btn-small" onClick={onSkip}>Skip ⏭</button>
+        </span>
       </header>
       <ol className="comic">
         {PANELS.map((p, i) => (

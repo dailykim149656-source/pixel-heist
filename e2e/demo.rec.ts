@@ -1,3 +1,4 @@
+import { writeFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import type { Placement } from "../lib/geometry";
 import { judge, judgeBeam, placementProblem, snapPlacement } from "../lib/judge";
@@ -36,6 +37,18 @@ async function withCursor(page: Page) {
 }
 
 const pause = (page: Page, ms: number) => page.waitForTimeout(ms);
+
+// The video has no sound; the game notes each sound it plays, and make-demo.mjs mixes them back in
+// at the same moments. t0 ≈ when the page (and its video) started.
+let t0 = 0;
+test.beforeEach(async ({ page }) => {
+  t0 = Date.now();
+  await page.addInitScript(() => ((window as unknown as { __audioLog: unknown[] }).__audioLog = []));
+});
+test.afterEach(async ({ page }, info) => {
+  const log = await page.evaluate(() => (window as unknown as { __audioLog?: unknown[] }).__audioLog ?? []).catch(() => []);
+  writeFileSync(info.outputPath("audio.json"), JSON.stringify({ t0, log }));
+});
 
 async function glide(page: Page, x: number, y: number) {
   await page.mouse.move(x, y, { steps: 25 });
@@ -239,11 +252,10 @@ test("05 stage 10 and the ending", async ({ page }) => {
   await place(page, 3, bridgeFor(10, shape.pen));
   await run(page, "win");
   await clickEl(page, page.getByRole("button", { name: "Watch the ending ▶" }));
-  for (let i = 0; i < 5; i++) {
-    await pause(page, 3200);
-    await page.keyboard.press("ArrowRight");
-  }
-  await pause(page, 5000);
+  // Let it play by itself: each panel advances once its lines have been spoken.
+  await page.mouse.move(1500, 860, { steps: 10 });
+  await expect(page.locator(".comic-panel.on")).toHaveCount(6, { timeout: 90_000 });
+  await pause(page, 6000);
 });
 
 /**

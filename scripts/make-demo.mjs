@@ -2,7 +2,7 @@
 // `npx playwright test -c demo.config.ts` records into recordings/raw.
 // Usage: node scripts/make-demo.mjs "<phone recording.mp4>"  →  recordings/pixel-heist-demo.mp4
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
 
@@ -39,6 +39,40 @@ async function card(lines, file) {
   await sharp(Buffer.from(svg)).png().toFile(file);
 }
 
+// Sound: every scene's recording comes with audio.json (what the game played, and when). Events in a
+// used stretch are moved onto the output timeline; voices are kept only where the video plays
+// near real speed, so lines never pile up.
+const events = []; // { file, at, volume, dur? }
+let outT = 0;
+const durationOf = (f) => Number(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", f]).toString().trim());
+let endingAt = null;
+
+function soundsFor(src, from, to, speed) {
+  let audio;
+  try {
+    audio = JSON.parse(readFileSync(path.join(path.dirname(src), "audio.json"), "utf8"));
+  } catch {
+    return;
+  }
+  const at = (t) => outT + ((t - audio.t0) / 1000 - from) / speed;
+  const inside = (t) => (t - audio.t0) / 1000 >= from && (t - audio.t0) / 1000 < to;
+  let stepsFrom = null;
+  for (const e of audio.log) {
+    if (e.kind === "music") {
+      if (e.name === "ending" && inside(e.t)) endingAt = at(e.t);
+      continue;
+    }
+    if (e.kind === "steps") {
+      if (e.name) stepsFrom = e.t;
+      else if (stepsFrom !== null && inside(stepsFrom) && speed <= 3.5) events.push({ file: "public/audio/sfx/run.mp3", at: at(stepsFrom), volume: 0.45, dur: (e.t - stepsFrom) / 1000 / speed, loop: true });
+      continue;
+    }
+    if (!inside(e.t)) continue;
+    if (e.kind === "voice" && speed <= 1.3) events.push({ file: `public/audio/vo/${e.name}.mp3`, at: at(e.t), volume: 1 });
+    if (e.kind === "sfx" && speed <= 3.5 && (e.name !== "panel" || speed <= 1.3)) events.push({ file: `public/audio/sfx/${e.name}.mp3`, at: at(e.t), volume: e.volume ?? 0.8 });
+  }
+}
+
 const enc = ["-r", "30", "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p", "-an"];
 const ff = (args) => execFileSync("ffmpeg", ["-nostdin", "-v", "error", "-y", ...args], { stdio: "inherit" });
 const parts = [];
@@ -55,7 +89,9 @@ async function desktop(name, src, from, to, speed, caption, inset) {
     await pill(caption, cap);
     ff(["-i", src, "-i", cap, "-filter_complex", `${chain}[v];[v][1:v]overlay=(W-w)/2:16`, ...enc, out]);
   } else ff(["-i", src, "-filter_complex", chain, ...enc, out]);
+  soundsFor(src, from, to, speed);
   parts.push(out);
+  outT += durationOf(out);
 }
 
 async function phoneClip(name, from, to, title, lines) {
@@ -69,6 +105,7 @@ async function phoneClip(name, from, to, title, lines) {
     "-t", String(d), ...enc, out,
   ]);
   parts.push(out);
+  outT += durationOf(out);
 }
 
 async function endCard(name, lines, seconds) {
@@ -76,30 +113,53 @@ async function endCard(name, lines, seconds) {
   await card(lines, png);
   ff(["-loop", "1", "-t", String(seconds), "-i", png, "-vf", "fps=30", ...enc, out]);
   parts.push(out);
+  outT += durationOf(out);
 }
 
 await desktop("landing", raw("01"), 0, 6, 1, "Steal reality. Escape the sketch.");
-await desktop("prologue", raw("01"), 9, 29.3, 3, "Prologue: your partner Sam is Meta SAM 3.1");
+await desktop("prologue", raw("01"), 9, 29.6, 3, "Prologue: your partner Sam is Meta SAM 3.1");
 await phoneClip("phone-photo", 27, 38, "LIVE on an iPhone", ["Snap any real object.", "Tap it, and Sam (Meta SAM 3.1)", "cuts out its exact pixels."]);
 await phoneClip("phone-cut", 54, 74, "Real mask, real numbers", ["The game measures only the shape:", "length, thickness, solidity, holes.", "Confidence and latency are", "straight from the API.", "Drop it on the camera's rays: blocked."]);
 await desktop("too-thick", raw("02"), 2, 16, 2.5, "Shape decides the job: the mug is too thick for the lasers");
-await desktop("muse", raw("02"), 16, 33, 1.1, "Ask Muse (Meta Muse Spark): it words what the engine worked out", { x: 1240, y: 520, w: 330, h: 250, k: 2.2, at: [24, 330] });
-await desktop("way1", raw("02"), 33, 42, 1.8, "Way 1: a thin bar across the gap");
-await desktop("way2", raw("02"), 42, 60, 2.6, "Way 2: weight on the far plate lowers the drawbridge");
-await desktop("way3", raw("02"), 60, 87.8, 3, "Way 3: a real hole on the hook. Same gap, three answers");
-await desktop("xray", raw("02b"), 19.7, 25.7, 1, "X-ray: the same plan as bounding boxes fails");
+await desktop("muse", raw("02"), 16, 31, 1.1, "Ask Muse (Meta Muse Spark): it words what the engine worked out", { x: 1240, y: 520, w: 330, h: 250, k: 2.2, at: [24, 330] });
+await desktop("way1", raw("02"), 31, 39, 1.8, "Way 1: a thin bar across the gap");
+await desktop("way2", raw("02"), 39, 60.5, 2.6, "Way 2: weight on the far plate lowers the drawbridge");
+await desktop("way3", raw("02"), 60.5, 86, 3, "Way 3: a real hole on the hook. Same gap, three answers");
+await desktop("xray", raw("02b"), 17.3, 23.3, 1, "X-ray: the same plan as bounding boxes fails");
 // The Curator's Challenge, twice: different loot, different rooms, each checked by the engine.
-await desktop("curatorA-steal", raw("06"), 3, 40, 6, "Curator's Challenge: Muse designs a room for this loot (mug + ruler)");
-await desktop("curatorA-room", raw("06"), 40, 48, 1, "Muse drew it. The engine checked it's beatable with these exact cut-outs", { x: 505, y: 235, w: 660, h: 430, k: 1.5, at: [466, 150] });
-await desktop("curatorA-play", raw("06"), 48, 76.6, 2.6, "Twin Cut Crossing: played and cleared");
-await desktop("curatorB-steal", raw("07"), 0, 29, 5, "Different loot (pen + calculator + scissors)…");
-await desktop("curatorB-room", raw("07"), 29, 36, 1, "…a different room", { x: 505, y: 235, w: 660, h: 430, k: 1.5, at: [466, 150] });
-await desktop("curatorB-play", raw("07"), 36, 59.1, 2.6, "Scissors on the hook, calculator on the camera, pen across");
-await desktop("stage8", raw("04"), 47, 85.8, 3, "Stage 8 of 10: sensor beams only a thin bar can slip between");
-await desktop("ending", raw("05"), 49, 72, 1.2, null);
+await desktop("curatorA-steal", raw("06"), 3, 39, 6, "Curator's Challenge: Muse designs a room for this loot (mug + ruler)");
+await desktop("curatorA-room", raw("06"), 39, 46, 1, "Muse drew it. The engine checked it's beatable with these exact cut-outs", { x: 505, y: 235, w: 660, h: 430, k: 1.5, at: [466, 150] });
+await desktop("curatorA-play", raw("06"), 46, 62.6, 2.2, "Played and cleared");
+await desktop("curatorB-steal", raw("07"), 0, 36, 6, "Different loot (pen + calculator + scissors)…");
+await desktop("curatorB-room", raw("07"), 36, 43, 1, "…a different room", { x: 505, y: 235, w: 660, h: 430, k: 1.5, at: [466, 150] });
+await desktop("curatorB-play", raw("07"), 43, 65.8, 2.4, "Scissors on the hook, calculator on the camera, pen across");
+await desktop("stage8", raw("04"), 61.5, 90.7, 3, "Stage 8 of 10: sensor beams only a thin bar can slip between");
+await desktop("ending", raw("05"), 50, 84.7, 1.1, "Ending · voices, music and effects generated with ElevenLabs");
 await endCard("end", ["PIXEL HEIST", "pixel-heist.vercel.app", "Built with Meta SAM 3.1 + Muse Spark 1.3 · sample desks are AI-generated"], 4);
 
 const list = path.join(WORK, "list.txt");
 writeFileSync(list, parts.map((p) => `file '${path.resolve(p)}'`).join("\n"));
-ff(["-f", "concat", "-safe", "0", "-i", list, "-c", "copy", "-movflags", "+faststart", path.join(OUT, "pixel-heist-demo.mp4")]);
+const silent = path.join(WORK, "silent.mp4");
+ff(["-f", "concat", "-safe", "0", "-i", list, "-c", "copy", silent]);
+
+// Mix: the heist loop under everything, the ending theme from the ending comic on, then the
+// game's own sounds at their moments.
+const total = outT, switchAt = endingAt ?? total;
+const inputs = ["-i", silent, "-stream_loop", "-1", "-i", "public/audio/bgm.mp3", "-i", "public/audio/ending.mp3"];
+const graph = [
+  `[1:a]atrim=0:${switchAt.toFixed(3)},afade=t=out:st=${Math.max(0, switchAt - 1.5).toFixed(3)}:d=1.5,volume=0.55[bed]`,
+  `[2:a]adelay=${Math.round(switchAt * 1000)}|${Math.round(switchAt * 1000)},volume=0.9[theme]`,
+];
+const labels = ["[bed]", "[theme]"];
+events.forEach((e, i) => {
+  inputs.push(...(e.loop ? ["-stream_loop", "-1"] : []), "-i", e.file);
+  const ms = Math.max(0, Math.round(e.at * 1000));
+  graph.push(`[${i + 3}:a]${e.dur ? `atrim=0:${e.dur.toFixed(3)},` : ""}volume=${e.volume},adelay=${ms}|${ms}[e${i}]`);
+  labels.push(`[e${i}]`);
+});
+graph.push(`${labels.join("")}amix=inputs=${labels.length}:normalize=0:duration=longest,apad,atrim=0:${total.toFixed(3)},loudnorm=I=-16:TP=-1.5:LRA=11[mix]`);
+const script = path.join(WORK, "mix.txt");
+writeFileSync(script, graph.join(";\n"));
+ff([...inputs, "-filter_complex_script", script, "-map", "0:v", "-map", "[mix]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", path.join(OUT, "pixel-heist-demo.mp4")]);
+console.log(`mixed ${events.length} sounds; ending theme at ${switchAt.toFixed(1)}s of ${total.toFixed(1)}s`);
 console.log("wrote recordings/pixel-heist-demo.mp4");

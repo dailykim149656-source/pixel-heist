@@ -97,7 +97,6 @@ export function HeroDemo() {
   return (
     <div className="hero-demo">
       <canvas ref={canvas} className="world" aria-label="Autoplay: a cut-out mug blocks the camera, a cut-out ruler bridges the gap, and the thief runs to the vault" />
-      <span className="hero-demo-tag">Real SAM 3.1 cut-outs · recorded</span>
     </div>
   );
 }
