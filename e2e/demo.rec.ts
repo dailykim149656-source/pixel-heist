@@ -78,7 +78,7 @@ async function openGame(page: Page, stage: number, desk: "A" | "B") {
   await page.goto("/");
   await page.getByRole("button", { name: "▶ Play the Heist" }).click();
   await page.getByRole("button", { name: "Skip ⏭" }).click();
-  await page.locator(".stage-chip select").selectOption(String(stage));
+  await page.getByRole("button", { name: new RegExp(`^Stage ${stage}: `) }).click();
   await page.getByRole("button", { name: `Try Sample Desk ${desk}` }).click();
   await expect(page.locator(".photo-box img")).toBeVisible();
   await page.getByRole("radio", { name: "Recorded" }).click();

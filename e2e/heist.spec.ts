@@ -34,7 +34,7 @@ async function startSample(page: Page, desk: "A" | "B" = "A", stage = 3) {
   await page.goto("/");
   await page.getByRole("button", { name: "▶ Play the Heist" }).click();
   await page.getByRole("button", { name: "Skip ⏭" }).click();
-  await page.locator(".stage-chip select").selectOption(String(stage));
+  await page.getByRole("button", { name: new RegExp(`^Stage ${stage}: `) }).click();
   await page.getByRole("button", { name: `Try Sample Desk ${desk}` }).click();
   await expect(page.locator(".photo-box img")).toBeVisible();
 }
@@ -207,6 +207,9 @@ test("Landing → prologue comic → Stage 1: a fresh game starts in the Lobby w
   for (let i = 0; i < 5; i++) await page.getByRole("button", { name: "Next ▸" }).click();
   await expect(page.locator(".comic-panel.on")).toHaveCount(6);
   await page.getByRole("button", { name: "▶ Start the heist" }).click();
+  // The museum map comes first: stage 1 open, the rest locked.
+  await expect(page.getByRole("button", { name: /^Stage 2: .*locked/ })).toBeDisabled();
+  await page.getByRole("button", { name: /^Stage 1: / }).click();
   await expect(page.locator(".stage-chip select")).toHaveValue("1");
   await expect(page.locator(".checklist li")).toHaveText([/Block the camera/, /Reach the vault/]);
   // Later stages stay locked until earlier ones are cleared.

@@ -11,6 +11,7 @@ import { MAX_LOOT, ROTATE_STEP_DEG, THIEF, WORLD } from "@/lib/stage";
 import { STAGES, stageById, type Stage } from "@/lib/stages";
 import { footsteps, playMusic, sfx } from "@/lib/audio";
 import { SoundToggle } from "./SoundToggle";
+import { StageSelect } from "./StageSelect";
 import { compileRoom, judgeRoom, lootForCurator, type RoomSpec } from "@/lib/curator";
 import { CuratorCard, type CuratorState } from "./CuratorCard";
 import { hintFacts, plainHint, type HintLevel, type PlanFacts } from "@/lib/hints";
@@ -48,6 +49,8 @@ export function Game({ onExit, onEnding }: { onExit: () => void; onEnding: () =>
   const [gameState, setGameState] = useState<GameState>("SETUP");
   const [stageId, setStageId] = useState(1);
   const [unlocked, setUnlocked] = useState(1);
+  // The museum map opens first, and from the header any time.
+  const [picking, setPicking] = useState(true);
   // A room the Curator designed for this loot replaces the numbered stage until you pick one.
   const [customStage, setCustomStage] = useState<Stage | null>(null);
   const stage = customStage ?? stageById(stageId);
@@ -560,9 +563,29 @@ export function Game({ onExit, onEnding }: { onExit: () => void; onEnding: () =>
         >
           ✦ Curator&apos;s Challenge
         </button>
+        <button className="btn btn-small" onClick={() => setPicking(true)} disabled={gameState === "RUNNING"} title="All stages">
+          ▦ Stages
+        </button>
         <SoundToggle />
         <button className="icon-btn" onClick={resetAll} title="Start over">↺</button>
       </header>
+      {picking && (
+        <StageSelect
+          unlocked={unlocked}
+          current={customStage ? null : stageId}
+          routes={routes}
+          lootCount={loot.length}
+          onPick={(id) => {
+            goToStage(id);
+            setPicking(false);
+          }}
+          onCurator={() => {
+            setPicking(false);
+            void challengeCurator();
+          }}
+          onClose={() => setPicking(false)}
+        />
+      )}
       {curator && <CuratorCard state={curator} onEnter={enterRoom} onClose={() => setCurator(null)} />}
 
       <main className="board">
