@@ -107,3 +107,7 @@ the sounds back in at the same moments.
 - Object size is normalized; nothing claims real-world size or weight.
 - Muse calls can take several seconds, longer when the API is busy.
 - "PIXEL HEIST" is a working title used by other games.
+
+## License
+
+Code: MIT (see LICENSE). Sample desk images are AI-generated; the recorded SAM outputs in `fixtures/sam/` come from Meta SAM 3.1; audio in `public/audio/` was generated with ElevenLabs.
