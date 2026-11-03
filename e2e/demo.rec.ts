@@ -126,8 +126,13 @@ const stays = (stageId: number) => (p: Placement) => { const q = snapPlacement(s
 const bridgeFor = (stageId: number, s: typeof shape.pen) =>
   first(gapPlacements(stageById(stageId), stageById(stageId).gaps[0], s), (p) => !placementProblem(stageById(stageId), p) && judge(stageById(stageId), [p]).gaps[0].bridged)!;
 
-test("01 landing and prologue", async ({ page }) => {
+test("01 landing, prologue and the stage map", async ({ page }) => {
   await withCursor(page);
+  // A player halfway through: six rooms open, two of stage 3's three ways found.
+  await page.addInitScript(() => {
+    localStorage.setItem("pixel-heist.unlocked", "6");
+    localStorage.setItem("pixel-heist.routes", JSON.stringify({ 3: ["bridge", "plate"] }));
+  });
   await page.goto("/");
   await page.mouse.move(1500, 120);
   await pause(page, 9000); // one full hero loop
@@ -137,6 +142,14 @@ test("01 landing and prologue", async ({ page }) => {
     await page.keyboard.press("ArrowRight");
   }
   await pause(page, 3000);
+  await clickEl(page, page.getByRole("button", { name: "▶ Start the heist" }));
+  await pause(page, 1500);
+  for (const n of [1, 3, 6, 9]) {
+    const b = (await page.getByRole("button", { name: new RegExp(`^Stage ${n}: `) }).boundingBox())!;
+    await glide(page, b.x + b.width / 2, b.y + b.height / 2);
+    await pause(page, 900);
+  }
+  await pause(page, 1500);
 });
 
 test("02 stage 3: three ways across, and Muse", async ({ page }) => {

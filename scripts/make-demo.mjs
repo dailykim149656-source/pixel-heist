@@ -43,7 +43,14 @@ async function card(lines, file) {
 // used stretch are moved onto the output timeline; voices are kept only where the video plays
 // near real speed, so lines never pile up.
 const events = []; // { file, at, volume, dur? }
+const narration = []; // { file, at }: the narrator, mixed on top with the rest ducked under it
 let outT = 0;
+/** Starts narration line `n` (assets/narration/nNN.mp3) at the next segment, never over the last one. */
+function say(n) {
+  const file = `assets/narration/n${String(n).padStart(2, "0")}.mp3`;
+  const prev = narration.at(-1);
+  narration.push({ file, at: Math.max(outT + 0.3, prev ? prev.at + durationOf(prev.file) + 0.3 : 0) });
+}
 const durationOf = (f) => Number(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", f]).toString().trim());
 let endingAt = null;
 
@@ -116,25 +123,38 @@ async function endCard(name, lines, seconds) {
   outT += durationOf(out);
 }
 
+say(1);
 await desktop("landing", raw("01"), 0, 6, 1, "Steal reality. Escape the sketch.");
-await desktop("prologue", raw("01"), 9, 29.6, 3, "Prologue: your partner Sam is Meta SAM 3.1");
+await desktop("prologue", raw("01"), 9, 29.5, 3, "Prologue: your partner Sam is Meta SAM 3.1");
+say(2);
+await desktop("map", raw("01"), 29.8, 37.8, 1, "The museum map: ten rooms, one new rule each");
+say(3);
 await phoneClip("phone-photo", 27, 38, "LIVE on an iPhone", ["Snap any real object.", "Tap it, and Sam (Meta SAM 3.1)", "cuts out its exact pixels."]);
+say(4);
 await phoneClip("phone-cut", 54, 74, "Real mask, real numbers", ["The game measures only the shape:", "length, thickness, solidity, holes.", "Confidence and latency are", "straight from the API.", "Drop it on the camera's rays: blocked."]);
+say(5);
 await desktop("too-thick", raw("02"), 2, 16, 2.5, "Shape decides the job: the mug is too thick for the lasers");
 await desktop("muse", raw("02"), 16, 31, 1.1, "Ask Muse (Meta Muse Spark): it words what the engine worked out", { x: 1240, y: 520, w: 330, h: 250, k: 2.2, at: [24, 330] });
+say(6);
 await desktop("way1", raw("02"), 31, 39, 1.8, "Way 1: a thin bar across the gap");
 await desktop("way2", raw("02"), 39, 60.5, 2.6, "Way 2: weight on the far plate lowers the drawbridge");
 await desktop("way3", raw("02"), 60.5, 86, 3, "Way 3: a real hole on the hook. Same gap, three answers");
+say(7);
 await desktop("xray", raw("02b"), 17.3, 23.3, 1, "X-ray: the same plan as bounding boxes fails");
 // The Curator's Challenge, twice: different loot, different rooms, each checked by the engine.
-await desktop("curatorA-steal", raw("06"), 3, 39, 6, "Curator's Challenge: Muse designs a room for this loot (mug + ruler)");
-await desktop("curatorA-room", raw("06"), 39, 46, 1, "Muse drew it. The engine checked it's beatable with these exact cut-outs", { x: 505, y: 235, w: 660, h: 430, k: 1.5, at: [466, 150] });
-await desktop("curatorA-play", raw("06"), 46, 62.6, 2.2, "Played and cleared");
-await desktop("curatorB-steal", raw("07"), 0, 36, 6, "Different loot (pen + calculator + scissors)…");
-await desktop("curatorB-room", raw("07"), 36, 43, 1, "…a different room", { x: 505, y: 235, w: 660, h: 430, k: 1.5, at: [466, 150] });
-await desktop("curatorB-play", raw("07"), 43, 65.8, 2.4, "Scissors on the hook, calculator on the camera, pen across");
+const curatorCard = { x: 515, y: 245, w: 570, h: 410, k: 1.6, at: [504, 170] };
+say(8);
+await desktop("curatorA-steal", raw("06"), 3, 38.3, 6, "Curator's Challenge: Muse designs a room for this loot (mug + ruler)");
+await desktop("curatorA-room", raw("06"), 38.3, 44, 1, "Muse drew it. The engine checked it's beatable with these exact cut-outs", curatorCard);
+await desktop("curatorA-play", raw("06"), 44, 61.4, 2.4, "Played and cleared");
+say(9);
+await desktop("curatorB-steal", raw("07"), 0, 23.5, 6, "Different loot (pen + calculator + scissors)…");
+await desktop("curatorB-room", raw("07"), 23.5, 29.4, 1, "…a different wing, a different room", curatorCard);
+await desktop("curatorB-play", raw("07"), 29.4, 55.7, 2.6, "Scissors on the hook, calculator on the camera, pen across");
+say(10);
 await desktop("stage8", raw("04"), 61.5, 90.7, 3, "Stage 8 of 10: sensor beams only a thin bar can slip between");
-await desktop("ending", raw("05"), 50, 84.7, 1.1, "Ending · voices, music and effects generated with ElevenLabs");
+await desktop("ending", raw("05"), 50, 84.7, 1.2, "Ending · voices, music and effects generated with ElevenLabs");
+say(11);
 await endCard("end", ["PIXEL HEIST", "pixel-heist.vercel.app", "Built with Meta SAM 3.1 + Muse Spark 1.3 · sample desks are AI-generated"], 4);
 
 const list = path.join(WORK, "list.txt");
@@ -157,9 +177,19 @@ events.forEach((e, i) => {
   graph.push(`[${i + 3}:a]${e.dur ? `atrim=0:${e.dur.toFixed(3)},` : ""}volume=${e.volume},adelay=${ms}|${ms}[e${i}]`);
   labels.push(`[e${i}]`);
 });
-graph.push(`${labels.join("")}amix=inputs=${labels.length}:normalize=0:duration=longest,apad,atrim=0:${total.toFixed(3)},loudnorm=I=-16:TP=-1.5:LRA=11[mix]`);
+graph.push(`${labels.join("")}amix=inputs=${labels.length}:normalize=0:duration=longest[game]`);
+// The narrator rides on top; the game's music and sounds duck under each line.
+const nLabels = narration.map((n, i) => {
+  const k = events.length + 3 + i, ms = Math.round(n.at * 1000);
+  inputs.push("-i", n.file);
+  graph.push(`[${k}:a]volume=1.6,adelay=${ms}|${ms}[n${i}]`);
+  return `[n${i}]`;
+});
+graph.push(`${nLabels.join("")}amix=inputs=${nLabels.length}:normalize=0:duration=longest,asplit[voice][key]`);
+graph.push(`[game][key]sidechaincompress=threshold=0.02:ratio=8:attack=40:release=500[ducked]`);
+graph.push(`[ducked][voice]amix=inputs=2:normalize=0:duration=longest,apad,atrim=0:${total.toFixed(3)},loudnorm=I=-16:TP=-1.5:LRA=11[mix]`);
 const script = path.join(WORK, "mix.txt");
 writeFileSync(script, graph.join(";\n"));
 ff([...inputs, "-filter_complex_script", script, "-map", "0:v", "-map", "[mix]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", path.join(OUT, "pixel-heist-demo.mp4")]);
-console.log(`mixed ${events.length} sounds; ending theme at ${switchAt.toFixed(1)}s of ${total.toFixed(1)}s`);
+console.log(`mixed ${events.length} sounds and ${narration.length} narration lines; ending theme at ${switchAt.toFixed(1)}s of ${total.toFixed(1)}s`);
 console.log("wrote recordings/pixel-heist-demo.mp4");
