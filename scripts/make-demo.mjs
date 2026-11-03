@@ -78,21 +78,25 @@ async function endCard(name, lines, seconds) {
   parts.push(out);
 }
 
-await desktop("landing", raw("01"), 0, 9, 1, "Steal reality. Escape the sketch.");
-await desktop("prologue", raw("01"), 9, 29.3, 2.2, "Prologue: your partner Sam is Meta SAM 3.1");
+await desktop("landing", raw("01"), 0, 6, 1, "Steal reality. Escape the sketch.");
+await desktop("prologue", raw("01"), 9, 29.3, 3, "Prologue: your partner Sam is Meta SAM 3.1");
 await phoneClip("phone-photo", 27, 38, "LIVE on an iPhone", ["Snap any real object.", "Tap it, and Sam (Meta SAM 3.1)", "cuts out its exact pixels."]);
 await phoneClip("phone-cut", 54, 74, "Real mask, real numbers", ["The game measures only the shape:", "length, thickness, solidity, holes.", "Confidence and latency are", "straight from the API.", "Drop it on the camera's rays: blocked."]);
-await desktop("too-thick", raw("02"), 2, 16, 2, "Shape decides the job: the mug is too thick for the lasers");
-await desktop("muse", raw("02"), 16, 33, 1.1, "Ask Muse (Meta Muse Spark 1.3): it words what the engine worked out", { x: 1240, y: 520, w: 330, h: 250, k: 2.2, at: [24, 330] });
-await desktop("way1", raw("02"), 33, 42, 1.5, "Way 1: a thin bar across the gap");
-await desktop("way2", raw("02"), 42, 60, 2, "Way 2: weight on the far plate lowers the drawbridge");
-await desktop("way3", raw("02"), 60, 87.8, 2, "Way 3: a real hole on the hook. Same gap, three answers");
-await desktop("xray", raw("02b"), 18, 25.7, 1, "X-ray: the same plan as bounding boxes fails");
-await desktop("stage4", raw("04"), 0, 25, 2.8, "Stage 4: a plate that needs bulk");
-await desktop("stage6", raw("04"), 25, 47, 2.8, "Stage 6: a slope that needs rotation");
-await desktop("stage8", raw("04"), 47, 85.8, 2.8, "Stage 8: sensor beams only a thin bar can slip between");
-await desktop("stage10", raw("05"), 0, 50, 3.2, "Stage 10: everything at once");
-await desktop("ending", raw("05"), 50, 72, 1, null);
+await desktop("too-thick", raw("02"), 2, 16, 2.5, "Shape decides the job: the mug is too thick for the lasers");
+await desktop("muse", raw("02"), 16, 33, 1.1, "Ask Muse (Meta Muse Spark): it words what the engine worked out", { x: 1240, y: 520, w: 330, h: 250, k: 2.2, at: [24, 330] });
+await desktop("way1", raw("02"), 33, 42, 1.8, "Way 1: a thin bar across the gap");
+await desktop("way2", raw("02"), 42, 60, 2.6, "Way 2: weight on the far plate lowers the drawbridge");
+await desktop("way3", raw("02"), 60, 87.8, 3, "Way 3: a real hole on the hook. Same gap, three answers");
+await desktop("xray", raw("02b"), 19.7, 25.7, 1, "X-ray: the same plan as bounding boxes fails");
+// The Curator's Challenge, twice: different loot, different rooms, each checked by the engine.
+await desktop("curatorA-steal", raw("06"), 3, 40, 6, "Curator's Challenge: Muse designs a room for this loot (mug + ruler)");
+await desktop("curatorA-room", raw("06"), 40, 48, 1, "Muse drew it. The engine checked it's beatable with these exact cut-outs", { x: 505, y: 235, w: 660, h: 430, k: 1.5, at: [466, 150] });
+await desktop("curatorA-play", raw("06"), 48, 76.6, 2.6, "Twin Cut Crossing: played and cleared");
+await desktop("curatorB-steal", raw("07"), 0, 29, 5, "Different loot (pen + calculator + scissors)…");
+await desktop("curatorB-room", raw("07"), 29, 36, 1, "…a different room", { x: 505, y: 235, w: 660, h: 430, k: 1.5, at: [466, 150] });
+await desktop("curatorB-play", raw("07"), 36, 59.1, 2.6, "Scissors on the hook, calculator on the camera, pen across");
+await desktop("stage8", raw("04"), 47, 85.8, 3, "Stage 8 of 10: sensor beams only a thin bar can slip between");
+await desktop("ending", raw("05"), 49, 72, 1.2, null);
 await endCard("end", ["PIXEL HEIST", "pixel-heist.vercel.app", "Built with Meta SAM 3.1 + Muse Spark 1.3 · sample desks are AI-generated"], 4);
 
 const list = path.join(WORK, "list.txt");

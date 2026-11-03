@@ -3,6 +3,9 @@ import type { Placement } from "../lib/geometry";
 import { judge, judgeBeam, placementProblem, snapPlacement } from "../lib/judge";
 import { stageById } from "../lib/stages";
 import { cameraCandidates, first, gapPlacements, hookCandidates, loadFixtureShape, plateCandidates } from "../tests/fixtures";
+import { compileRoom, type RoomSpec } from "../lib/curator";
+import { findPlan } from "../lib/solver";
+import { STAGES } from "../lib/stages";
 
 /**
  * Desktop footage for the demo video (docs/DEMO_SCRIPT.md). One test per scene, one video each.
@@ -241,4 +244,41 @@ test("05 stage 10 and the ending", async ({ page }) => {
     await page.keyboard.press("ArrowRight");
   }
   await pause(page, 5000);
+});
+
+/**
+ * The Curator's Challenge with live Muse: the design it returns is captured on its way to the page,
+ * compiled the same way the game does, and solved by the engine, so the scene can play it out.
+ */
+async function curatorScene(page: Page, desk: "A" | "B", steals: { at: { x: number; y: number }; shape: typeof shape.mug }[]) {
+  let spec: RoomSpec | null = null;
+  await page.route("**/api/curator", async (route) => {
+    const res = await route.fetch();
+    const json = await res.json();
+    if (json.ok) spec = json.spec;
+    await route.fulfill({ response: res, json });
+  });
+  await openGame(page, 1, desk);
+  for (const s of steals) await steal(page, s.at);
+  await clickEl(page, page.getByRole("button", { name: "✦ Curator's Challenge" }));
+  const card = page.getByRole("dialog", { name: "The Curator's Challenge" });
+  await expect(card.getByRole("button", { name: "Enter the room ▶" })).toBeVisible({ timeout: 120_000 });
+  await pause(page, 5000);
+  const log = await card.locator(".curator-log").innerText();
+  const title = (await card.locator(".curator-title").innerText()).trim();
+  const room = log.includes("falling back") ? STAGES.find((st) => st.name === title)! : compileRoom(spec!, 1);
+  await clickEl(page, card.getByRole("button", { name: "Enter the room ▶" }));
+  await pause(page, 1500);
+  const items = steals.map((s, i) => ({ id: String(i), shape: s.shape }));
+  const plan = findPlan(room, items, 30_000).plan!;
+  for (const step of plan) await place(page, Number(step.item), step.placement);
+  await run(page, "win");
+}
+
+test("06 curator, desk A loot", async ({ page }) => {
+  await curatorScene(page, "A", [{ at: A.mug, shape: shape.mug }, { at: A.ruler, shape: shape.ruler }]);
+});
+
+test("07 curator, desk B loot", async ({ page }) => {
+  await curatorScene(page, "B", [{ at: B.pen, shape: shape.pen }, { at: B.calc, shape: shape.calc }, { at: B.scissors, shape: shape.scissors }]);
 });
