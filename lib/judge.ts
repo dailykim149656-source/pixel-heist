@@ -268,8 +268,9 @@ export function placementProblem(stage: Stage, p: Placement): string | null {
 }
 
 const HOOK_SNAP = 28;
-const GAP_CENTER_SNAP = 80;
-/** How far above or below a gap's walk line an item mostly over the gap is pulled down onto it. */
+const GAP_CENTER_SNAP = 48;
+const GAP_CENTER_SNAP_BRIDGE = 80;
+/** How far above or below a gap's walk line an item lying across the gap is pulled down onto it. */
 const GAP_DROP_SNAP = 110;
 
 /**
@@ -288,11 +289,15 @@ export function snapPlacement(stage: Stage, p: Placement): Placement {
   for (const g of stage.gaps) {
     if (b.right < g.left - g.support || b.left > g.right + g.support) continue;
     const gapCenter = (g.left + g.right) / 2, itemCenter = (b.left + b.right) / 2;
-    const over = Math.abs(itemCenter - gapCenter) <= GAP_CENTER_SNAP;
-    if (over) q = { ...q, x: q.x + gapCenter - itemCenter };
-    // Dropped over the gap: settle onto the ledges even from well above (a finger on a phone
-    // can't hit a 13px window). Near but not over it, only a short reach, so camera blockers stay put.
-    return restOn(q, (x) => (x >= g.left - g.support && x <= g.right + g.support ? gapLineY(g, x) : null), over ? GAP_DROP_SNAP : undefined);
+    // A bridge-shaped item (thin, and long enough to span) dropped roughly over the gap settles onto
+    // the ledges from well above: a finger on a phone can't hit a 13px window. Anything else near a
+    // gap, like a mug blocking a camera, keeps the short reach and stays where it was put.
+    const m = p.shape.metrics;
+    const bridgeShaped = m.thicknessPx <= g.slotAbove + g.slotBelow && m.longestUnbrokenSpanPx >= g.right - g.left + 2 * g.support - 8;
+    const centre = bridgeShaped ? GAP_CENTER_SNAP_BRIDGE : GAP_CENTER_SNAP;
+    const centred = Math.abs(itemCenter - gapCenter) <= centre;
+    if (centred) q = { ...q, x: q.x + gapCenter - itemCenter };
+    return restOn(q, (x) => (x >= g.left - g.support && x <= g.right + g.support ? gapLineY(g, x) : null), bridgeShaped && centred ? GAP_DROP_SNAP : undefined);
   }
   for (const pl of stage.plates) {
     if (b.right < pl.x || b.left > pl.x + pl.width) continue;
