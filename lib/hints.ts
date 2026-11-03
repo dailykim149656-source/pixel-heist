@@ -50,7 +50,7 @@ export function jobText(stage: Stage, j: Job) {
   }
 }
 
-const NEEDS: Record<Job["kind"], string> = {
+export const NEEDS: Record<Job["kind"], string> = {
   camera: "something big enough to cover the red rays",
   bridge: "something long and thin (a bar, a pen, a ruler)",
   plate: "something solid and heavy-looking",

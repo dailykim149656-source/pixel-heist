@@ -5,7 +5,8 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 
 const ENDPOINT = "https://api.meta.ai/v1/responses";
-const MODEL = "muse-spark-1.3";
+/** Muse Spark 1.3 first; 1.2 answers when 1.3 is overloaded. */
+const MODELS = ["muse-spark-1.3", "muse-spark-1.2"];
 const TIMEOUT_MS = 20_000;
 const MAX_BODY = 8_000;
 const CALLS_PER_HOUR = 60;
@@ -26,7 +27,7 @@ Rules:
 - If "needs" is not empty, say what shape of thing to steal from a photo instead.
 - At most two short sentences. Warm, a little conspiratorial. No emojis, no stage directions, no asterisks.`;
 
-const cache = new Map<string, string>();
+const cache = new Map<string, { text: string; model: string }>();
 const callLog = new Map<string, number[]>();
 
 export async function POST(req: Request): Promise<Response> {
@@ -45,7 +46,7 @@ export async function POST(req: Request): Promise<Response> {
 
   const key = createHash("sha256").update(raw).digest("hex");
   const hit = cache.get(key);
-  if (hit) return Response.json({ ok: true, text: hit, latencyMs: 0, cached: true });
+  if (hit) return Response.json({ ok: true, ...hit, latencyMs: 0, cached: true });
 
   const client = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
   const now = Date.now();
@@ -54,22 +55,36 @@ export async function POST(req: Request): Promise<Response> {
   callLog.set(client, [...recent, now]);
 
   const startedAt = Date.now();
-  try {
-    const res = await fetch(ENDPOINT, {
+  const ask = (model: string, budgetMs: number) =>
+    fetch(ENDPOINT, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: MODEL,
+        model,
         instructions: INSTRUCTIONS,
         input: `FACTS:\n${JSON.stringify(facts, null, 1)}`,
         // The engine already did the thinking; Muse only has to say it. Minimal effort answers in ~3s.
         reasoning: { effort: "minimal" },
       }),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(budgetMs),
     });
-    if (!res.ok) {
-      console.error("hint upstream", res.status);
-      return Response.json({ ok: false, error: res.status === 429 ? "RATE_LIMIT" : "UPSTREAM" }, { status: 502 });
+  try {
+    let res: Response | null = null, model = MODELS[0];
+    for (const [i, m] of MODELS.entries()) {
+      model = m;
+      try {
+        res = await ask(m, i === 0 ? 10_000 : Math.max(4_000, TIMEOUT_MS - (Date.now() - startedAt)));
+      } catch (err) {
+        if (i === MODELS.length - 1) throw err;
+        console.warn("hint fallback", m, "timeout");
+        continue;
+      }
+      if (res.status < 500) break;
+      console.warn("hint fallback", m, res.status);
+    }
+    if (!res || !res.ok) {
+      console.error("hint upstream", res?.status);
+      return Response.json({ ok: false, error: res?.status === 429 ? "RATE_LIMIT" : "UPSTREAM" }, { status: 502 });
     }
     const data = (await res.json()) as { output?: { type: string; content?: { type: string; text?: string }[] }[] };
     const text = (data.output ?? [])
@@ -81,9 +96,9 @@ export async function POST(req: Request): Promise<Response> {
       .replace(/\*[^*]+\*/g, "") // drop any "*whispers*" stage directions
       .trim();
     if (!text) return Response.json({ ok: false, error: "EMPTY" }, { status: 502 });
-    cache.set(key, text);
+    cache.set(key, { text, model });
     if (cache.size > 300) cache.delete(cache.keys().next().value!);
-    return Response.json({ ok: true, text, latencyMs: Date.now() - startedAt });
+    return Response.json({ ok: true, text, model, latencyMs: Date.now() - startedAt });
   } catch (err) {
     const timeout = err instanceof DOMException && err.name === "TimeoutError";
     console.error("hint failed", timeout ? "timeout" : String(err).slice(0, 200));

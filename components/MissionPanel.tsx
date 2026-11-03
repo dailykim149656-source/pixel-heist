@@ -25,7 +25,9 @@ type Props = {
 };
 
 /** A hint from Muse: the engine's facts (plain) and Muse's wording of them, once it answers. */
-export type MuseState = { level: HintLevel; plain: string | null; text: string | null; status: "solving" | "asking" | "done" | "error"; latencyMs?: number };
+export type MuseState = { level: HintLevel; plain: string | null; text: string | null; status: "solving" | "asking" | "done" | "error"; latencyMs?: number; model?: string };
+
+const MODEL_LABEL: Record<string, string> = { "muse-spark-1.3": "Meta Muse Spark 1.3", "muse-spark-1.2": "Meta Muse Spark 1.2" };
 
 const FAIL_TITLE: Partial<Record<GameState, string>> = { CAUGHT: "Caught!", FELL: "Fell!", STUCK: "Stuck!" };
 
@@ -44,7 +46,7 @@ export function MissionPanel({ stage, missions, vaultReached, settled, boxJudged
     <aside className="panel mission">
       <h2 className="panel-title">Mission</h2>
       <p className="stage-teaser">
-        <b>Stage {stage.id}</b> · {stage.teaser}
+        <b>{stage.id >= 1000 ? `✦ ${stage.name}` : `Stage ${stage.id}`}</b> · {stage.teaser}
       </p>
       <ul className="checklist">
         {missions.map((m) => (
@@ -90,7 +92,7 @@ export function MissionPanel({ stage, missions, vaultReached, settled, boxJudged
           <span className="muse-avatar" aria-hidden>✦</span>
           <span>
             <b>Ask Muse</b> <span className="sam-role">the voice in your charm</span>
-            <small>AI model · Meta Muse Spark 1.3</small>
+            <small>AI model · {MODEL_LABEL[muse?.model ?? ""] ?? "Meta Muse Spark 1.3"}</small>
           </span>
         </div>
         <div className="row tight muse-levels">

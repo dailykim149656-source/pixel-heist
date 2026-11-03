@@ -8,7 +8,9 @@ import { buildPreview, extractLoot, normalizePhoto, segmentLive, segmentSample, 
 import { SEGMENT_ERROR_TEXT, type PromptPoint, type SegmentErrorCode } from "@/lib/segment-types";
 import { samBagged, samError, samGreeting, samRecordedMiss, samReply, yourRequest, type ChatMessage } from "@/lib/sam-voice";
 import { MAX_LOOT, ROTATE_STEP_DEG, THIEF, WORLD } from "@/lib/stage";
-import { STAGES, stageById } from "@/lib/stages";
+import { STAGES, stageById, type Stage } from "@/lib/stages";
+import { compileRoom, judgeRoom, lootForCurator, type RoomSpec } from "@/lib/curator";
+import { CuratorCard, type CuratorState } from "./CuratorCard";
 import { hintFacts, plainHint, type HintLevel, type PlanFacts } from "@/lib/hints";
 import type { MuseState } from "./MissionPanel";
 import { loadRoutes, routesFor, routesUsed, saveRoutes, type Route } from "@/lib/routes";
@@ -44,7 +46,9 @@ export function Game({ onExit, onEnding }: { onExit: () => void; onEnding: () =>
   const [gameState, setGameState] = useState<GameState>("SETUP");
   const [stageId, setStageId] = useState(1);
   const [unlocked, setUnlocked] = useState(1);
-  const stage = stageById(stageId);
+  // A room the Curator designed for this loot replaces the numbered stage until you pick one.
+  const [customStage, setCustomStage] = useState<Stage | null>(null);
+  const stage = customStage ?? stageById(stageId);
   useEffect(() => {
     try {
       const saved = Number(localStorage.getItem(PROGRESS_KEY));
@@ -298,6 +302,83 @@ export function Game({ onExit, onEnding }: { onExit: () => void; onEnding: () =>
     return () => window.removeEventListener("keydown", key);
   }, [rotate, selected, drag]);
 
+  /** Run the plan search for `st` with the current loot, off the main thread. */
+  const planWith = useCallback(
+    (st: Stage, budgetMs: number) => {
+      solver.current ??= new Worker(new URL("../lib/solver.worker.ts", import.meta.url), { type: "module" });
+      const w = solver.current;
+      const items = loot.map((l) => ({ id: l.id, shape: l.shape }));
+      return new Promise<PlanFacts>((resolve) => {
+        w.onmessage = (e: MessageEvent<PlanFacts>) => resolve(e.data);
+        w.postMessage({ stage: st, items, budgetMs });
+      });
+    },
+    [loot],
+  );
+
+  // ---- The Curator's Challenge -------------------------------------------------------------
+  // Muse designs a room for this loot; the engine compiles it and alone decides if it's fair.
+  const [curator, setCurator] = useState<CuratorState | null>(null);
+  const roomSeq = useRef(1000);
+  const challengeCurator = useCallback(async () => {
+    const log: CuratorState["log"] = [];
+    const show = (patch: Partial<CuratorState>) => setCurator((c) => ({ ...(c ?? { status: "designing", log: [] }), ...patch, log: [...log] }));
+    const lootFacts = lootForCurator(loot);
+    let previous: RoomSpec | undefined, feedback: string | undefined;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      log.push({ who: "muse", text: attempt === 1 ? "The Curator studies your loot and draws a room…" : "Rejected. The Curator redraws it…" });
+      show({ status: "designing" });
+      let spec: RoomSpec;
+      try {
+        const res = await fetch("/api/curator", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ loot: lootFacts, previous, feedback }) });
+        const data = (await res.json()) as { ok: boolean; spec?: RoomSpec; latencyMs?: number; model?: string };
+        if (!data.ok || !data.spec) throw new Error("no design");
+        spec = data.spec;
+        log.push({ who: "muse", text: `Designed “${spec.title}” in ${((data.latencyMs ?? 0) / 1000).toFixed(1)}s (${data.model ?? "muse"}).` });
+      } catch {
+        log.push({ who: "engine", text: "The Curator didn't answer." });
+        break;
+      }
+      const room = compileRoom(spec, ++roomSeq.current);
+      log.push({ who: "engine", text: "Engine: searching your real cut-outs for a way through…" });
+      show({ status: "checking" });
+      const verdict = judgeRoom(room, await planWith(room, 8000), loot.length);
+      if (verdict.ok) {
+        log.push({ who: "engine", text: `Engine: beatable with your loot ✓ (a plan uses ${verdict.itemsUsed} cut-out${verdict.itemsUsed > 1 ? "s" : ""}).` });
+        show({ status: "ready", room, line: spec.curatorLine, title: spec.title });
+        return;
+      }
+      log.push({ who: "engine", text: `Engine: rejected. ${verdict.reason}` });
+      previous = spec;
+      feedback = verdict.reason;
+    }
+    // Fallback: the hardest hand-made room this loot can still beat.
+    log.push({ who: "engine", text: "Engine: falling back to the hardest built-in room your loot can beat…" });
+    show({ status: "checking" });
+    for (const st of [...STAGES].reverse()) {
+      const v = judgeRoom(st, await planWith(st, 2500), loot.length);
+      if (v.ok) {
+        log.push({ who: "engine", text: `Engine: “${st.name}” is beatable with your loot ✓` });
+        show({ status: "ready", room: { ...st, id: ++roomSeq.current }, line: "Fine. One of my classics, then.", title: st.name });
+        return;
+      }
+    }
+    log.push({ who: "engine", text: "Nothing fits this loot yet. Steal something else first." });
+    show({ status: "error" });
+  }, [loot, planWith]);
+
+  const enterRoom = useCallback(() => {
+    if (curator?.status !== "ready" || !curator.room) return;
+    setCustomStage(curator.room);
+    setCurator(null);
+    setPlaced({});
+    setRun(null);
+    setSelected(null);
+    setGameState("SETUP");
+    setStartedAt(Date.now());
+    setFinishedAt(null);
+  }, [curator]);
+
   // ---- Muse hints -----------------------------------------------------------------------
   // The engine works out what's done and what would work with this loot (in a worker); Muse words it.
   const askSeq = useRef(0);
@@ -305,30 +386,24 @@ export function Game({ onExit, onEnding }: { onExit: () => void; onEnding: () =>
     async (level: HintLevel) => {
       const seq = ++askSeq.current;
       setMuse({ level, plain: null, text: null, status: "solving" });
-      solver.current ??= new Worker(new URL("../lib/solver.worker.ts", import.meta.url), { type: "module" });
-      const w = solver.current;
-      const items = loot.map((l) => ({ id: l.id, shape: l.shape }));
-      const facts = await new Promise<PlanFacts>((resolve) => {
-        w.onmessage = (e: MessageEvent<PlanFacts>) => resolve(e.data);
-        w.postMessage({ stageId: stage.id, items, budgetMs: 8000 });
-      });
+      const facts = await planWith(stage, 8000);
       if (seq !== askSeq.current) return;
       const f = hintFacts(stage, settled, loot, facts, level);
       const plain = plainHint(f);
       setMuse({ level, plain, text: null, status: "asking" });
       try {
         const res = await fetch("/api/hint", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) });
-        const data = (await res.json()) as { ok: boolean; text?: string; latencyMs?: number };
+        const data = (await res.json()) as { ok: boolean; text?: string; latencyMs?: number; model?: string };
         if (seq !== askSeq.current) return;
-        setMuse(data.ok ? { level, plain, text: data.text!, status: "done", latencyMs: data.latencyMs } : { level, plain, text: null, status: "error" });
+        setMuse(data.ok ? { level, plain, text: data.text!, status: "done", latencyMs: data.latencyMs, model: data.model } : { level, plain, text: null, status: "error" });
       } catch {
         if (seq === askSeq.current) setMuse({ level, plain, text: null, status: "error" });
       }
     },
-    [loot, stage, settled],
+    [loot, stage, settled, planWith],
   );
   // A hint is about one moment: drop it when the board or the stage changes.
-  const boardKey = JSON.stringify(placed) + stageId + loot.length;
+  const boardKey = JSON.stringify(placed) + stage.id + loot.length;
   useEffect(() => {
     askSeq.current++;
     setMuse(null);
@@ -355,15 +430,15 @@ export function Game({ onExit, onEnding }: { onExit: () => void; onEnding: () =>
         if (run.plan.outcome === "WON") {
           setFinishedAt(Date.now());
           const used = routesUsed(stage, settled);
-          const known = routes[stageId] ?? [];
+          const known = routes[stage.id] ?? [];
           const fresh = used.filter((r) => !known.includes(r));
           setNewRoutes(fresh);
           if (fresh.length) {
-            const next = { ...routes, [stageId]: [...known, ...fresh] };
+            const next = { ...routes, [stage.id]: [...known, ...fresh] };
             setRoutes(next);
             saveRoutes(next);
           }
-          const next = Math.min(STAGES.length, stageId + 1);
+          const next = customStage ? 0 : Math.min(STAGES.length, stageId + 1);
           setUnlocked((u) => {
             const v = Math.max(u, next);
             try {
@@ -379,7 +454,7 @@ export function Game({ onExit, onEnding }: { onExit: () => void; onEnding: () =>
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [run, gameState, stageId, stage, settled, routes]);
+  }, [run, gameState, stageId, stage, settled, routes, customStage]);
 
   const resetRun = useCallback(() => {
     setRun(null);
@@ -388,6 +463,7 @@ export function Game({ onExit, onEnding }: { onExit: () => void; onEnding: () =>
 
   /** Loot carries over between stages; placements, runs and the clock start fresh. */
   const goToStage = useCallback((id: number) => {
+    setCustomStage(null);
     setStageId(id);
     setPlaced({});
     setRun(null);
@@ -440,7 +516,8 @@ export function Game({ onExit, onEnding }: { onExit: () => void; onEnding: () =>
         <span className="tagline">Steal reality. Escape the sketch.</span>
         <label className="stage-chip">
           <span className="sr-only">Stage</span>
-          <select value={stageId} onChange={(e) => goToStage(Number(e.target.value))} disabled={gameState === "RUNNING"}>
+          <select value={customStage ? "custom" : stageId} onChange={(e) => e.target.value !== "custom" && goToStage(Number(e.target.value))} disabled={gameState === "RUNNING"}>
+            {customStage && <option value="custom">✦ Curator: {customStage.name}</option>}
             {STAGES.map((st) => (
               <option key={st.id} value={st.id} disabled={st.id > unlocked}>
                 Stage {st.id}: {st.name}
@@ -449,8 +526,17 @@ export function Game({ onExit, onEnding }: { onExit: () => void; onEnding: () =>
             ))}
           </select>
         </label>
+        <button
+          className="btn btn-small btn-curator"
+          onClick={() => void challengeCurator()}
+          disabled={loot.length === 0 || gameState === "RUNNING" || (curator !== null && curator.status !== "ready" && curator.status !== "error")}
+          title={loot.length ? "Muse (as the Curator) designs a room for the loot you brought; the engine checks it's beatable" : "Steal something first"}
+        >
+          ✦ Curator&apos;s Challenge
+        </button>
         <button className="icon-btn" onClick={resetAll} title="Start over">↺</button>
       </header>
+      {curator && <CuratorCard state={curator} onEnter={enterRoom} onClose={() => setCurator(null)} />}
 
       <main className="board">
         <PhotoPanel
@@ -501,7 +587,7 @@ export function Game({ onExit, onEnding }: { onExit: () => void; onEnding: () =>
           hasPhoto={!!photo}
           inference={inference}
           photoKind={photo?.kind ?? null}
-          routes={{ all: routesFor(stage), found: routes[stageId] ?? [] }}
+          routes={{ all: routesFor(stage), found: routes[stage.id] ?? [] }}
           muse={muse}
           onAskMuse={(l) => void askMuse(l)}
         />
@@ -523,11 +609,11 @@ export function Game({ onExit, onEnding }: { onExit: () => void; onEnding: () =>
           extractions={extractions}
           used={usedItems}
           stageName={stage.name}
-          nextStage={STAGES.find((st) => st.id === stageId + 1) ?? null}
+          nextStage={customStage ? null : STAGES.find((st) => st.id === stageId + 1) ?? null}
           onNext={() => goToStage(stageId + 1)}
-          onEnding={stageId === STAGES.length ? onEnding : null}
+          onEnding={!customStage && stageId === STAGES.length ? onEnding : null}
           newRoutes={newRoutes}
-          routesLeft={routesFor(stage).length - (routes[stageId] ?? []).length}
+          routesLeft={routesFor(stage).length - (routes[stage.id] ?? []).length}
           onRetry={resetRun}
           onNewPhoto={() => {
             resetAll();

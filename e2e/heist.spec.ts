@@ -378,3 +378,36 @@ test("Ask Muse: hints come from the engine's facts, and skip what's already done
   console.log("Muse:", await said.textContent());
   console.log("Engine:", await page.locator(".muse-facts").textContent());
 });
+
+test("Curator's Challenge: Muse designs a room for this loot, the engine rejects an unfair one and accepts the redraw", async ({ page }) => {
+  const base = { title: "Hall of Echoes", curatorLine: "A long bar and something with a hole. Cute.", camera: { use: true, x: 620, need: 5 }, door: { use: false, x: 360, opener: "plate" }, beams: 0 };
+  // First design: a steep gap with no drawbridge and a door that needs a plate (desk A can't do both). Second: fair.
+  const designs = [
+    { ...base, gap: { use: true, left: 480, width: 140, rise: 0, drawbridge: "none" }, door: { use: true, x: 360, opener: "hook" }, camera: { use: true, x: 620, need: 6 }, beams: 2 },
+    { ...base, gap: { use: true, left: 480, width: 120, rise: 0, drawbridge: "both" } },
+  ];
+  const sent: { feedback?: string; loot: { ref: string; holes: number }[] }[] = [];
+  await page.route("**/api/curator", async (route) => {
+    sent.push(route.request().postDataJSON());
+    if (process.env.LIVE_MUSE) return route.continue();
+    await route.fulfill({ json: { ok: true, spec: designs[Math.min(sent.length - 1, 1)], latencyMs: 9000 } });
+  });
+
+  await startSample(page, "A", 1);
+  await page.getByRole("radio", { name: "Recorded" }).click();
+  await steal(page, MUG);
+  await steal(page, RULER);
+  await page.getByRole("button", { name: "✦ Curator's Challenge" }).click();
+  const card = page.getByRole("dialog", { name: "The Curator's Challenge" });
+  await expect(card.getByRole("button", { name: "Enter the room ▶" })).toBeVisible({ timeout: 90_000 });
+  console.log((await card.locator(".curator-log").innerText()).replace(/\n+/g, " | "));
+  if (process.env.SHOT) await card.screenshot({ path: process.env.SHOT });
+  expect(sent[0].loot).toEqual([expect.objectContaining({ ref: "cut-out 1", holes: 1 }), expect.objectContaining({ ref: "cut-out 2", holes: 0 })]);
+  if (!process.env.LIVE_MUSE) {
+    await expect(card.locator(".curator-log")).toContainText("rejected");
+    expect(sent[1].feedback).toBeTruthy();
+  }
+  await card.getByRole("button", { name: "Enter the room ▶" }).click();
+  await expect(page.locator(".stage-teaser")).toContainText("✦");
+  await expect(page.locator(".checklist li")).not.toHaveCount(0);
+});
