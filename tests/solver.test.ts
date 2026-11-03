@@ -15,10 +15,13 @@ describe("findPlan: the ground truth behind hints", () => {
       expect(r.plan, `stage ${s.id}`).not.toBeNull();
     }
   });
-  it("says what's missing: desk A has nothing that can hang or bridge the steep stair of stage 10", () => {
+  it("says what's missing: the mug alone can't climb the steep stair of stage 10; desk A's ruler can, but two cut-outs aren't enough", () => {
+    const mugOnly = findPlan(stageById(10), deskA.filter((i) => i.id === "mug"), 20_000);
+    expect(mugOnly.plan).toBeNull();
+    expect(mugOnly.missing.map((m) => m.id)).toContain("gap");
     const r = findPlan(stageById(10), deskA, 20_000);
     expect(r.plan).toBeNull();
-    expect(r.missing.map((m) => m.id)).toContain("gap");
+    expect(r.can.ruler.map((j) => j.kind)).toContain("bridge");
   });
   it("knows what each item can do in stage 3", () => {
     const r = findPlan(stageById(3), deskA, 20_000);

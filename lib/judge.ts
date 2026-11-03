@@ -274,6 +274,7 @@ const GAP_CENTER_SNAP = 48;
 const GAP_CENTER_SNAP_BRIDGE = 80;
 /** How far above or below a gap's walk line an item lying across the gap is pulled down onto it. */
 const GAP_DROP_SNAP = 110;
+const SLOPE_SNAP_DEG = 10;
 
 /**
  * Snaps (PRD §3.2 step 7). Only position changes — whether the result works is still decided by
@@ -299,6 +300,14 @@ export function snapPlacement(stage: Stage, p: Placement): Placement {
     const centre = bridgeShaped ? GAP_CENTER_SNAP_BRIDGE : GAP_CENTER_SNAP;
     const centred = Math.abs(itemCenter - gapCenter) <= centre;
     if (centred) q = { ...q, x: q.x + gapCenter - itemCenter };
+    // Turn steps are 15°, but slopes aren't multiples of 15. A bar turned to within SLOPE_SNAP_DEG of
+    // the slope (either way round) lines up with it, so one press or two both work and a slim ruler
+    // climbs too. A flat bar on a steep slope is still too far off: turning it stays the puzzle.
+    if (bridgeShaped && centred && g.yLeft !== g.yRight) {
+      const slope = (Math.atan2(g.yRight - g.yLeft, g.right - g.left) * 180) / Math.PI;
+      const off = ((((q.rotationDeg - slope) % 180) + 270) % 180) - 90;
+      if (Math.abs(off) <= SLOPE_SNAP_DEG) q = { ...q, rotationDeg: (((q.rotationDeg - off) % 360) + 360) % 360 };
+    }
     const surface = (x: number) => (x >= g.left - g.support && x <= g.right + g.support ? gapLineY(g, x) : null);
     const settled = restOn(q, surface, bridgeShaped && centred ? GAP_DROP_SNAP : undefined);
     // A bar turned to the slope one way or the other is the same tilt. Real cut-outs aren't

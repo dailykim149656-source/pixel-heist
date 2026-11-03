@@ -183,7 +183,7 @@ export const STAGES: Stage[] = [
   {
     id: 9,
     name: "The Counterweight",
-    teaser: "Weigh the plate, climb a steeper stair, and stay out of sight. Only the slimmest bar makes this climb — turn it to match the slope.",
+    teaser: "Weigh the plate, climb a steeper stair, and stay out of sight. Lay a thin bar up the stair: turn it to match the slope (⟲ once or twice).",
     floors: [{ x0: -10, x1: 560, y: FLOOR }, { x0: 690, x1: 970, y: FLOOR - 50 }],
     cameras: [camera({ id: "cam", x: 600, fromX: 380, toX: 520, need: 6, forbiddenRadius: 70 })],
     gaps: [gap({ id: "gap", left: 560, right: 690, yRight: FLOOR - 50, slotAbove: 36 })],

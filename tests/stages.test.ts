@@ -206,9 +206,14 @@ describe("Stage 8 — The Tripwire (beams + camera + gap)", () => {
 
 describe("Stage 9 — The Counterweight (plate + steep gap + camera)", () => {
   const s = stageById(9);
-  it("only the slimmest bar makes the steep climb", () => {
-    expect(first(gapPlacements(s, s.gaps[0], B.pen), bridges(9))).not.toBeNull();
-    expect(first(gapPlacements(s, s.gaps[0], A.ruler), bridges(9))).toBeNull();
+  it("a thin bar from either desk makes the steep climb once turned; a mug or a flat bar doesn't", () => {
+    const g = s.gaps[0], mid = (g.left + g.right) / 2;
+    const dropped = (shape: typeof A.ruler, rotationDeg: number) => snapPlacement(s, { shape, x: mid, y: g.yLeft - 30, rotationDeg });
+    for (const shape of [A.ruler, B.pen]) {
+      for (const r of [345, 330, 165, 150]) expect(bridges(9)(dropped(shape, r)), `turned ${r}°`).toBe(true);
+      for (const r of [0, 15, 30]) expect(bridges(9)(dropped(shape, r)), `turned ${r}°`).toBe(false);
+    }
+    expect(bridges(9)(dropped(A.mug, 345))).toBe(false);
   });
   it("mug on the plate, calculator on the camera, pen up the stair", () => {
     const pl = first(plateCandidates(s, s.plates[0], A.mug))!;
