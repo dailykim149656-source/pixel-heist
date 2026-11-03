@@ -15,6 +15,8 @@ export const maxDuration = 30;
 const ENDPOINT = "https://api.meta.ai/v1/responses";
 const MODEL = "sam-3.1";
 const TIMEOUT_MS = 25_000;
+/** Retry a transient failure only if it came back this fast; the function has 30s in all. */
+const RETRY_BEFORE_MS = 12_000;
 const MAX_BYTES = 4 * 1024 * 1024;
 const MAX_SIDE = 2048;
 const MAX_POINTS = 8;
@@ -76,50 +78,34 @@ export async function POST(req: Request): Promise<Response> {
   });
 
   const startedAt = Date.now();
-  let upstream: Response;
-  try {
-    upstream = await fetch(ENDPOINT, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", Accept: "text/event-stream" },
-      body: JSON.stringify({
-        model: MODEL,
-        input: [
-          {
-            type: "message",
-            role: "user",
-            content: [
-              { type: "input_text", text: promptText },
-              { type: "input_image", image_url: `data:${image.type};base64,${bytes.toString("base64")}` },
-            ],
-          },
+  const request = JSON.stringify({
+    model: MODEL,
+    input: [
+      {
+        type: "message",
+        role: "user",
+        content: [
+          { type: "input_text", text: promptText },
+          { type: "input_image", image_url: `data:${image.type};base64,${bytes.toString("base64")}` },
         ],
-        stream: true,
-        metadata: { include_confidence: "true" },
-      }),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-  } catch (err) {
-    if (err instanceof DOMException && err.name === "TimeoutError") return fail("TIMEOUT", "SAM did not answer in time", 504);
-    return fail("UPSTREAM", "could not reach SAM", 502);
-  }
-  if (upstream.status === 429) return fail("RATE_LIMIT", "SAM rate limit", 429);
-  if (!upstream.ok || !upstream.body) {
-    console.error("segment upstream", upstream.status); // status only: never log images or keys
-    return fail("UPSTREAM", `SAM returned ${upstream.status}`, 502);
-  }
+      },
+    ],
+    stream: true,
+    metadata: { include_confidence: "true" },
+  });
 
-  let result;
-  try {
-    result = await parseImageStream(sseEvents(upstream.body)).finalResult;
-  } catch (err) {
-    if (err instanceof DOMException && err.name === "TimeoutError") return fail("TIMEOUT", "SAM stream timed out", 504);
-    return fail("MASK_PARSE_ERROR", "could not read SAM stream", 502);
+  // SAM's answer is deterministic, so a failure that isn't about the image (a stream cut off
+  // mid-way, an upstream 5xx) is worth one quiet retry while there's time left.
+  let attempt = await askSam(apiKey, request, TIMEOUT_MS);
+  if (!attempt.ok && attempt.transient && Date.now() - startedAt < RETRY_BEFORE_MS) {
+    console.warn("segment retry", attempt.code, attempt.message);
+    attempt = await askSam(apiKey, request, TIMEOUT_MS - (Date.now() - startedAt));
   }
-  const rec = recordsOfKind(result.records, "mask")[0];
-  if (!rec) {
-    const dropped = result.diagnostics.some((d) => d.severity === "error");
-    return fail(dropped ? "MASK_PARSE_ERROR" : "NO_OBJECT", dropped ? "mask lines were dropped" : "no object at that point", dropped ? 502 : 200);
+  if (!attempt.ok) {
+    console.error("segment failed", attempt.code, attempt.message); // reason only: never log images or keys
+    return fail(attempt.code, attempt.message, attempt.status);
   }
+  const rec = attempt.rec;
 
   const raster = decodeMaskToRaster(rec.mask);
   const { left, top, right, bottom } = rec.bounds;
@@ -140,6 +126,57 @@ export async function POST(req: Request): Promise<Response> {
   cache.set(key, body);
   if (cache.size > 200) cache.delete(cache.keys().next().value!);
   return Response.json(body);
+}
+
+type MaskRecord = ReturnType<typeof recordsOfKind<"mask">>[number];
+type Attempt =
+  | { ok: true; rec: MaskRecord }
+  | { ok: false; code: SegmentErrorCode; message: string; status: number; transient: boolean };
+
+/** One SAM call: request, read the stream, pick the mask record. */
+async function askSam(apiKey: string, body: string, timeoutMs: number): Promise<Attempt> {
+  const no = (code: SegmentErrorCode, message: string, status: number, transient = false): Attempt => ({ ok: false, code, message, status, transient });
+  let upstream: Response;
+  try {
+    upstream = await fetch(ENDPOINT, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", Accept: "text/event-stream" },
+      body,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (err) {
+    if (isTimeout(err)) return no("TIMEOUT", "SAM did not answer in time", 504);
+    return no("UPSTREAM", `could not reach SAM: ${errorText(err)}`, 502, true);
+  }
+  if (upstream.status === 429) return no("RATE_LIMIT", "SAM rate limit", 429);
+  if (!upstream.ok || !upstream.body) return no("UPSTREAM", `SAM returned ${upstream.status}`, 502, upstream.status >= 500);
+
+  let result;
+  try {
+    result = await parseImageStream(sseEvents(upstream.body)).finalResult;
+  } catch (err) {
+    if (isTimeout(err)) return no("TIMEOUT", "SAM stream timed out", 504);
+    return no("MASK_PARSE_ERROR", `could not read SAM stream: ${errorText(err)}`, 502, true);
+  }
+  const rec = recordsOfKind(result.records, "mask")[0];
+  if (!rec) {
+    const dropped = result.diagnostics.filter((d) => d.severity === "error");
+    if (dropped.length) return no("MASK_PARSE_ERROR", `mask lines were dropped: ${dropped.map((d) => d.code).join(",")}`, 502, true);
+    if (result.outcome.status !== "completed") return no("MASK_PARSE_ERROR", `stream ended ${result.outcome.status}`, 502, true);
+    return no("NO_OBJECT", "no object at that point", 200);
+  }
+  const bw = rec.bounds.right - rec.bounds.left;
+  if (rec.mask.width !== bw) return no("MASK_PARSE_ERROR", "mask does not match its box", 502);
+  return { ok: true, rec };
+}
+
+const isTimeout = (err: unknown) => err instanceof DOMException && err.name === "TimeoutError";
+/** The error and its causes (the parser wraps transport errors), for the log and the message. */
+function errorText(err: unknown) {
+  const parts: string[] = [];
+  for (let e = err, depth = 0; e && depth < 4; e = e instanceof Error ? e.cause : null, depth++)
+    parts.push(e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+  return parts.join(" ← ").slice(0, 300);
 }
 
 function fail(code: SegmentErrorCode, message: string, status: number) {
