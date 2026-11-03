@@ -19,13 +19,6 @@ const W = 1920, H = 1080, PAPER = "#efe6d6", INK = "#3f3a34";
 const FONT = "Chalkboard SE";
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
 
-/** Top-centre caption pill for desktop footage. */
-async function pill(text, file) {
-  const w = Math.min(1500, 120 + text.length * 19);
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="68"><rect width="${w}" height="68" rx="16" fill="${INK}" fill-opacity="0.92"/><text x="${w / 2}" y="45" font-family="${FONT}" font-size="32" fill="#fff7d6" text-anchor="middle">${esc(text)}</text></svg>`;
-  await sharp(Buffer.from(svg)).png().toFile(file);
-}
-
 /** Left-hand caption card next to the phone. */
 async function side(title, lines, file) {
   const body = lines.map((l, i) => `<text x="0" y="${150 + i * 54}" font-family="${FONT}" font-size="36" fill="${INK}">${esc(l)}</text>`).join("");
@@ -85,17 +78,14 @@ const ff = (args) => execFileSync("ffmpeg", ["-nostdin", "-v", "error", "-y", ..
 const parts = [];
 
 /** `inset` blows up part of the 1600×900 recording (e.g. Muse's reply) beside the action. */
-async function desktop(name, src, from, to, speed, caption, inset) {
-  const out = path.join(WORK, `${parts.length}-${name}.mp4`), cap = path.join(WORK, `${name}.png`);
+async function desktop(name, src, from, to, speed, inset) {
+  const out = path.join(WORK, `${parts.length}-${name}.mp4`);
   let chain = `[0:v]trim=${from}:${to},setpts=(PTS-STARTPTS)/${speed},fps=30`;
   if (inset) {
     const { x, y, w, h, k, at } = inset;
     chain += `,split[full][z];[z]crop=${w}:${h}:${x}:${y},scale=${Math.round(w * k)}:-2:flags=lanczos,pad=iw+8:ih+8:4:4:color=0x8c52ff[zz];[full]scale=${W}:${H}:flags=lanczos[bg];[bg][zz]overlay=${at[0]}:${at[1]}`;
   } else chain += `,scale=${W}:${H}:flags=lanczos`;
-  if (caption) {
-    await pill(caption, cap);
-    ff(["-i", src, "-i", cap, "-filter_complex", `${chain}[v];[v][1:v]overlay=(W-w)/2:16`, ...enc, out]);
-  } else ff(["-i", src, "-filter_complex", chain, ...enc, out]);
+  ff(["-i", src, "-filter_complex", chain, ...enc, out]);
   soundsFor(src, from, to, speed);
   parts.push(out);
   outT += durationOf(out);
@@ -124,38 +114,38 @@ async function endCard(name, lines, seconds) {
 }
 
 say(1);
-await desktop("landing", raw("01"), 0, 6, 1, "Steal reality. Escape the sketch.");
-await desktop("prologue", raw("01"), 9, 29.5, 3, "Prologue: your partner Sam is Meta SAM 3.1");
+await desktop("landing", raw("01"), 0, 6, 1);
+await desktop("prologue", raw("01"), 9, 29.5, 3);
 say(2);
-await desktop("map", raw("01"), 29.8, 37.8, 1, "The museum map: ten rooms, one new rule each");
+await desktop("map", raw("01"), 29.8, 37.8, 1);
 say(3);
 await phoneClip("phone-photo", 27, 38, "LIVE on an iPhone", ["Snap any real object.", "Tap it, and Sam (Meta SAM 3.1)", "cuts out its exact pixels."]);
 say(4);
 await phoneClip("phone-cut", 54, 74, "Real mask, real numbers", ["The game measures only the shape:", "length, thickness, solidity, holes.", "Confidence and latency are", "straight from the API.", "Drop it on the camera's rays: blocked."]);
 say(5);
-await desktop("too-thick", raw("02"), 2, 16, 2.5, "Shape decides the job: the mug is too thick for the lasers");
-await desktop("muse", raw("02"), 16, 31, 1.1, "Ask Muse (Meta Muse Spark): it words what the engine worked out", { x: 1240, y: 520, w: 330, h: 250, k: 2.2, at: [24, 330] });
+await desktop("too-thick", raw("02"), 2, 16, 2.5);
+await desktop("muse", raw("02"), 16, 31, 1.1, { x: 1240, y: 520, w: 330, h: 250, k: 2.2, at: [24, 330] });
 say(6);
-await desktop("way1", raw("02"), 31, 39, 1.8, "Way 1: a thin bar across the gap");
-await desktop("way2", raw("02"), 39, 60.5, 2.6, "Way 2: weight on the far plate lowers the drawbridge");
-await desktop("way3", raw("02"), 60.5, 86, 3, "Way 3: a real hole on the hook. Same gap, three answers");
+await desktop("way1", raw("02"), 31, 39, 1.8);
+await desktop("way2", raw("02"), 39, 60.5, 2.6);
+await desktop("way3", raw("02"), 60.5, 86, 3);
 say(7);
-await desktop("xray", raw("02b"), 17.3, 23.3, 1, "X-ray: the same plan as bounding boxes fails");
+await desktop("xray", raw("02b"), 17.3, 23.3, 1);
 // The Curator's Challenge, twice: different loot, different rooms, each checked by the engine.
 const curatorCard = { x: 515, y: 245, w: 570, h: 410, k: 1.6, at: [504, 170] };
 say(8);
-await desktop("curatorA-steal", raw("06"), 3, 38.3, 6, "Curator's Challenge: Muse designs a room for this loot (mug + ruler)");
-await desktop("curatorA-room", raw("06"), 38.3, 44, 1, "Muse drew it. The engine checked it's beatable with these exact cut-outs", curatorCard);
-await desktop("curatorA-play", raw("06"), 44, 61.4, 2.4, "Played and cleared");
+await desktop("curatorA-steal", raw("06"), 3, 38.3, 6);
+await desktop("curatorA-room", raw("06"), 38.3, 44, 1, curatorCard);
+await desktop("curatorA-play", raw("06"), 44, 61.4, 2.4);
 say(9);
-await desktop("curatorB-steal", raw("07"), 0, 23.5, 6, "Different loot (pen + calculator + scissors)…");
-await desktop("curatorB-room", raw("07"), 23.5, 29.4, 1, "…a different wing, a different room", curatorCard);
-await desktop("curatorB-play", raw("07"), 29.4, 55.7, 2.6, "Scissors on the hook, calculator on the camera, pen across");
+await desktop("curatorB-steal", raw("07"), 0, 23.5, 6);
+await desktop("curatorB-room", raw("07"), 23.5, 29.4, 1, curatorCard);
+await desktop("curatorB-play", raw("07"), 29.4, 55.7, 2.6);
 say(10);
-await desktop("stage8", raw("04"), 61.5, 90.7, 3, "Stage 8 of 10: sensor beams only a thin bar can slip between");
-await desktop("ending", raw("05"), 50, 84.7, 1.2, "Ending · voices, music and effects generated with ElevenLabs");
+await desktop("stage8", raw("04"), 61.5, 90.7, 3);
+await desktop("ending", raw("05"), 50, 84.7, 1.2);
 say(11);
-await endCard("end", ["PIXEL HEIST", "pixel-heist.vercel.app", "Built with Meta SAM 3.1 + Muse Spark 1.3 · sample desks are AI-generated"], 4);
+await endCard("end", ["PIXEL HEIST", "pixel-heist.vercel.app", "Built with Meta SAM 3.1 + Muse Spark 1.3 · sample desks are AI-generated", "Music, effects and voices generated with ElevenLabs"], 4);
 
 const list = path.join(WORK, "list.txt");
 writeFileSync(list, parts.map((p) => `file '${path.resolve(p)}'`).join("\n"));
