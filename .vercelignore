@@ -1,0 +1,7 @@
+.env.local
+.env*.local
+node_modules
+.next
+._*
+.DS_Store
+samples/ChatGPT Image*
