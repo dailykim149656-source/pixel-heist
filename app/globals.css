@@ -186,13 +186,6 @@ button { font: inherit; color: inherit; }
 .hl { background: var(--marker); padding: 0 6px; font-size: 18px; }
 @keyframes fade { from { opacity: 0; } }
 
-/* ---------- small screens (PRD §4.1: desktop only for MVP) ---------- */
-.small-screen { display: none; }
-@media (max-width: 1023px) {
-  .small-screen { display: grid; place-items: center; text-align: center; min-height: 100vh; padding: 24px 16px; background: var(--paper); }
-  .small-screen ~ * { display: none !important; }
-}
-
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
@@ -335,7 +328,6 @@ button { font: inherit; color: inherit; }
   .comic { grid-template-columns: minmax(0, 1fr); }
   .speech, .comic-caption { font-size: 14px; }
 }
-.small-screen .btn { margin-top: 12px; }
 
 /* ---------- ending ---------- */
 .comic-finale {
@@ -343,3 +335,60 @@ button { font: inherit; color: inherit; }
   font: clamp(20px, 2.4vw, 34px) var(--font-hand), cursive; letter-spacing: 1px; animation: pop 900ms 1.6s ease-out both;
 }
 .prologue.is-ending .comic-panel:last-child.on { background: #26221e; }
+
+/* ---------- phones and tablets ---------- */
+.only-touch { display: none; }
+@media (pointer: coarse) {
+  .only-touch { display: inline-block; }
+  .kbd-hint { display: none; }
+}
+@media (max-width: 1023px) {
+  /* One scrolling column: the sketch sticks to the top, the loot bag to the bottom, so items can be
+     dragged from one to the other while the photo and missions scroll in between. */
+  .app { display: flex; flex-direction: column; height: auto; min-height: 100dvh; }
+  .topbar { flex-wrap: wrap; gap: 8px 12px; padding: 8px 12px; }
+  .topbar .tagline { display: none; }
+  .topbar .logo { font-size: 22px; }
+  .stage-chip { flex: 1; min-width: 0; margin-left: 0; }
+  .stage-chip select { width: 100%; }
+  .board { display: flex; flex-direction: column; gap: 12px; padding: 0 12px 12px; }
+  .world-col {
+    order: -1; position: sticky; top: 0; z-index: 4; background: var(--paper);
+    margin: 0 -12px; padding: 8px 12px 6px; border-bottom: 1.5px dashed var(--line); gap: 6px;
+  }
+  .world-frame { box-shadow: none; }
+  .world-actions { flex-wrap: wrap; gap: 6px; }
+  .world-actions .btn { font-size: 15px; padding: 5px 10px; }
+  .world-actions .btn-run, .world-actions > .btn-primary:last-child { font-size: 17px; padding: 6px 14px; }
+  .panel { overflow: visible; }
+  .photo-box { height: min(56vw, 320px); }
+  .sam-log { max-height: 160px; }
+  .lootbar {
+    position: sticky; bottom: 0; z-index: 4; background: var(--paper); min-height: 0;
+    padding: 6px 12px calc(8px + env(safe-area-inset-bottom)); gap: 10px; box-shadow: 0 -4px 12px rgba(40, 30, 20, 0.08);
+  }
+  .loot-title { font-size: 17px; }
+  .loot-tip { display: none; }
+  .slots { gap: 8px; }
+  .slot { width: 64px; height: 64px; }
+  .slot-x { width: 26px; height: 26px; top: -8px; right: -8px; }
+  .success-card { max-width: calc(100vw - 24px); padding: 22px 18px; }
+  .success-title { font-size: 40px; }
+  .success-backdrop { padding: 12px; z-index: 10; }
+}
+@media (max-width: 1023px) {
+  .photo-tools { flex-wrap: wrap; }
+  .photo-tools .row.tight { flex-wrap: wrap; }
+}
+@media (max-width: 520px) {
+  .loot-title { display: none; }
+  .slots { width: 100%; justify-content: space-between; overflow: visible; padding: 8px 0 2px; }
+  .slot { width: calc((100vw - 24px - 32px) / 5); height: calc((100vw - 24px - 32px) / 5); }
+  .btn-xray { font-size: 13px !important; }
+}
+.refine-modes { display: flex; width: fit-content; margin: 2px 0 6px; }
+.upload-row { justify-content: center; margin-top: 0; }
+@media (pointer: coarse) {
+  .world-actions .btn, .segmented button, .link { min-height: 40px; }
+  .world-actions .btn[aria-label^="Rotate"] { min-width: 48px; font-size: 20px; }
+}

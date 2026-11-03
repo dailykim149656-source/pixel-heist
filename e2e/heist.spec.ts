@@ -296,3 +296,30 @@ test("Stage 10 with Desk B alone, then the ending comic ends on a cliffhanger", 
   await page.getByRole("button", { name: "Back to the start ↺" }).click();
   await expect(page.getByRole("button", { name: "▶ Play the Heist" })).toBeVisible();
 });
+
+test.describe("phone", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test("the sketch and the loot bag stay on screen while the photo scrolls; camera and library inputs exist", async ({ page }) => {
+    await startSample(page, "A", 1);
+    await page.getByRole("radio", { name: "Recorded" }).click();
+    const camera = page.locator('input[type=file][capture="environment"]');
+    await expect(camera).toHaveAttribute("accept", "image/*");
+    await expect(page.locator('input[type=file]:not([capture])')).toHaveAttribute("accept", "image/*");
+
+    await page.locator(".photo-box").scrollIntoViewIfNeeded();
+    await steal(page, MUG);
+    // Both docks are inside the viewport at the same time, so a drag can go from one to the other.
+    const world = (await page.locator("canvas.world").boundingBox())!;
+    const bag = (await page.locator(".lootbar").boundingBox())!;
+    expect(world.y).toBeGreaterThanOrEqual(0);
+    expect(bag.y + bag.height).toBeLessThanOrEqual(844 + 1);
+
+    const s = stageById(1);
+    const spot = first(cameraCandidates(s, s.cameras[0], loadFixtureShape("mug")), (p) => p.rotationDeg === 0)!;
+    await dropLoot(page, 0, spot.x, spot.y, spot.shape.grid.height);
+    await expect(mission(page, "Block the camera")).toHaveClass(/done/);
+    await page.getByRole("button", { name: /RUN HEIST/ }).click();
+    await expect(page.getByText("ESCAPE SUCCESS!")).toBeVisible({ timeout: 10_000 });
+  });
+});

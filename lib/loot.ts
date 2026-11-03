@@ -32,13 +32,17 @@ export type Photo = {
 
 export const SPRITE_RES = 2;
 const MAX_SIDE = 2048;
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 30 * 1024 * 1024; // phone camera originals; downscaled before upload
 
 /** EXIF-rotate, cap at 2048px and re-encode as JPEG (PRD §7.2 step 0). */
 export async function normalizePhoto(file: Blob, kind: Photo["kind"], sampleId?: SampleId): Promise<Photo> {
-  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error("Use a JPG, PNG or WebP image.");
-  if (file.size > MAX_UPLOAD_BYTES) throw new Error("Image is over 10MB.");
-  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+  // Phone cameras hand over HEIC or an empty type; anything the browser can decode is fine,
+  // since it's re-encoded as JPEG below before it goes anywhere.
+  if (file.type && !file.type.startsWith("image/")) throw new Error("That file isn't an image.");
+  if (file.size > MAX_UPLOAD_BYTES) throw new Error(`Image is over ${MAX_UPLOAD_BYTES >> 20}MB.`);
+  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" }).catch(() => {
+    throw new Error("This browser can't open that image. Try a JPG or PNG.");
+  });
   const size = fitWithin(bitmap, MAX_SIDE);
   const canvas = document.createElement("canvas");
   canvas.width = size.width;

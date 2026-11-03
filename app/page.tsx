@@ -24,26 +24,14 @@ export default function Page() {
       />
     );
 
+  if (screen === "game") return <Game onExit={() => setScreen("landing")} onEnding={() => setScreen("ending")} />;
   return (
-    <>
-      {screen === "game" && (
-        <div className="small-screen">
-          <p className="logo">PIXEL HEIST</p>
-          <p>This heist needs a bigger desk. Open it on a desktop browser (1280×800 or larger).</p>
-          <button className="btn" onClick={() => setScreen("landing")}>← Back</button>
-        </div>
-      )}
-      {screen === "game" ? (
-        <Game onExit={() => setScreen("landing")} onEnding={() => setScreen("ending")} />
-      ) : (
-        <Comic
-          title="Prologue · The Call"
-          panels={PROLOGUE}
-          doneLabel={screen === "replay" ? "▶ Play the Heist" : "▶ Start the heist"}
-          onDone={() => setScreen("game")}
-          onSkip={() => setScreen(screen === "replay" ? "landing" : "game")}
-        />
-      )}
-    </>
+    <Comic
+      title="Prologue · The Call"
+      panels={PROLOGUE}
+      doneLabel={screen === "replay" ? "▶ Play the Heist" : "▶ Start the heist"}
+      onDone={() => setScreen("game")}
+      onSkip={() => setScreen(screen === "replay" ? "landing" : "game")}
+    />
   );
 }

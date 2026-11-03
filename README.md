@@ -67,6 +67,6 @@ Progress is remembered in the browser. Clearing stage 10 unlocks the ending comi
 
 ## Known limitations
 
-- Desktop Chrome, 1280×800 or larger. Small screens get a notice.
+- Desktop and phone browsers. On phones the sketch stays pinned at the top and the loot bag at the bottom, so cut-outs drag straight from one to the other; photos can come from the camera or the photo library.
 - One stage.
 - Object size is normalized and never claims real-world size or weight.

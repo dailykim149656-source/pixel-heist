@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { boxToImagePixel, containRect } from "@/lib/coords";
 import type { Photo } from "@/lib/loot";
 import { SAM_LABEL, type ChatMessage } from "@/lib/sam-voice";
@@ -27,6 +27,9 @@ type Props = {
 export function PhotoPanel(props: Props) {
   const { photo, seg, inference } = props;
   const fileInput = useRef<HTMLInputElement>(null);
+  const cameraInput = useRef<HTMLInputElement>(null);
+  // Touch screens have no Shift/Alt, so taps can be switched to add or exclude points.
+  const [tapMode, setTapMode] = useState<"new" | "add" | "remove">("new");
   const box = useRef<HTMLDivElement>(null);
   const overlay = useRef<HTMLCanvasElement>(null);
 
@@ -84,7 +87,7 @@ export function PhotoPanel(props: Props) {
     const r = box.current.getBoundingClientRect();
     const pt = boxToImagePixel({ x: e.clientX - r.left, y: e.clientY - r.top }, { width: r.width, height: r.height }, photo);
     if (!pt) return;
-    props.onClick(pt, e.altKey ? "remove" : e.shiftKey ? "add" : "new");
+    props.onClick(pt, e.altKey ? "remove" : e.shiftKey ? "add" : seg.kind === "PREVIEW" ? tapMode : "new");
   };
 
   const preview = seg.kind === "PREVIEW" ? seg.preview : null;
@@ -96,7 +99,10 @@ export function PhotoPanel(props: Props) {
 
       {!photo ? (
         <div className="dropzone">
-          <button className="btn" onClick={() => fileInput.current?.click()}>⇪ Upload a photo</button>
+          <div className="row upload-row">
+            <button className="btn" onClick={() => fileInput.current?.click()}>⇪ Upload a photo</button>
+            <button className="btn only-touch" onClick={() => cameraInput.current?.click()}>📷 Take a photo</button>
+          </div>
           <span className="muted">or</span>
           <div className="row">
             {(Object.keys(SAMPLES) as SampleId[]).map((id) => (
@@ -140,6 +146,7 @@ export function PhotoPanel(props: Props) {
                 </button>
               )}
               <button className="link" onClick={() => fileInput.current?.click()}>New photo</button>
+              <button className="link only-touch" onClick={() => cameraInput.current?.click()}>Camera</button>
             </span>
           </div>
 
@@ -174,7 +181,14 @@ export function PhotoPanel(props: Props) {
               </p>
               {inference === "LIVE_API" && (
                 <p className="fineprint">
-                  Wrong part? Shift+click to add, Alt+click to exclude, then Refine.
+                  <span className="refine-modes segmented" role="radiogroup" aria-label="Tap adds">
+                    {(["new", "add", "remove"] as const).map((m) => (
+                      <button key={m} role="radio" aria-checked={tapMode === m} className={tapMode === m ? "on" : ""} onClick={() => setTapMode(m)}>
+                        {m === "new" ? "New cut" : m === "add" ? "+ Include" : "− Exclude"}
+                      </button>
+                    ))}
+                  </span>
+                  Wrong part? Tap with + Include / − Exclude (or Shift/Alt+click), then Refine.
                   {seg.kind === "PREVIEW" && seg.pending.length > 0 && (
                     <>
                       {" "}
@@ -192,17 +206,23 @@ export function PhotoPanel(props: Props) {
         </>
       )}
 
-      <input
-        ref={fileInput}
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        hidden
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) props.onLoadFile(f);
-          e.target.value = "";
-        }}
-      />
+      {/* image/* lets phones offer the photo library and the camera; the second input opens the camera directly. */}
+      {[fileInput, cameraInput].map((ref, i) => (
+        <input
+          key={i}
+          ref={ref}
+          type="file"
+          accept="image/*"
+          capture={i === 1 ? "environment" : undefined}
+          hidden
+          aria-label={i === 1 ? "Take a photo" : "Choose a photo"}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) props.onLoadFile(f);
+            e.target.value = "";
+          }}
+        />
+      ))}
     </aside>
   );
 }

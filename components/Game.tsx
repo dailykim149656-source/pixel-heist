@@ -255,9 +255,11 @@ export function Game({ onExit, onEnding }: { onExit: () => void; onEnding: () =>
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
     return () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
     };
   }, [drag, candidate, candidateProblem, worldPoint]);
 
