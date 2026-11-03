@@ -1,0 +1,138 @@
+import { expect, test, type Page } from "@playwright/test";
+
+/**
+ * Sample-mode end-to-end runs (PRD §9, §13). Recorded SAM cuts are used, so no live API calls;
+ * error handling stubs /api/segment.
+ */
+
+const SAMPLE = { width: 1448, height: 1086 };
+const MUG = { x: 260, y: 410 };
+const RULER = { x: 330, y: 790 };
+
+/** Image pixel → page coordinates, using the same object-fit: contain math as the app. */
+async function photoPoint(page: Page, p: { x: number; y: number }) {
+  const b = (await page.locator(".photo-box").boundingBox())!;
+  const s = Math.min(b.width / SAMPLE.width, b.height / SAMPLE.height);
+  return {
+    x: b.x + (b.width - SAMPLE.width * s) / 2 + (p.x + 0.5) * s,
+    y: b.y + (b.height - SAMPLE.height * s) / 2 + (p.y + 0.5) * s,
+  };
+}
+
+async function worldPoint(page: Page, x: number, y: number) {
+  const b = (await page.locator("canvas.world").boundingBox())!;
+  return { x: b.x + (x / 960) * b.width, y: b.y + (y / 540) * b.height };
+}
+
+async function startSample(page: Page) {
+  await page.goto("/");
+  await page.getByRole("button", { name: "▶ Play" }).click();
+  await page.getByRole("button", { name: "Try Sample Desk" }).click();
+  await expect(page.locator(".photo-box img")).toBeVisible();
+}
+
+async function steal(page: Page, at: { x: number; y: number }) {
+  const p = await photoPoint(page, at);
+  await page.mouse.click(p.x, p.y);
+  await expect(page.locator(".geo-card")).toBeVisible();
+  await page.getByRole("button", { name: "Extract ✂" }).click();
+  await expect(page.locator(".geo-card")).toBeHidden();
+}
+
+/** Drag loot slot `index` so the item's center lands at world (cx, cy). Loot drags hold the item near its top edge. */
+async function dropLoot(page: Page, index: number, cx: number, cy: number, itemHeight: number) {
+  const slot = (await page.locator(".slot-grab").nth(index).boundingBox())!;
+  const target = await worldPoint(page, cx, cy - itemHeight / 2 + 10);
+  await page.mouse.move(slot.x + slot.width / 2, slot.y + slot.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x, target.y, { steps: 12 });
+  await page.mouse.up();
+}
+
+const mission = (page: Page, name: string) => page.locator(".checklist li", { hasText: name });
+
+test("T10: recorded mug + ruler → block camera, bridge gap, escape", async ({ page }) => {
+  await startSample(page);
+  await page.getByRole("radio", { name: "Recorded" }).click();
+
+  await steal(page, MUG);
+  await expect(page.locator(".sam-log .bubble").last()).toContainText("Bagged");
+  await steal(page, RULER);
+
+  // Both cuts are labelled as recorded, never as live (T12).
+  await expect(page.locator(".slot-origin")).toHaveText(["REC", "REC"]);
+  await expect(page.locator(".api-status")).toContainText("Recorded cuts");
+
+  await dropLoot(page, 0, 400, 200, 177);
+  await expect(mission(page, "Block the camera")).toHaveClass(/done/);
+  await expect(mission(page, "Block the camera")).toContainText(/[5-7]\/7 rays blocked/);
+
+  await dropLoot(page, 1, 495, 418, 25);
+  await expect(mission(page, "Bridge the gap")).toHaveClass(/done/);
+
+  await page.getByRole("button", { name: /RUN HEIST/ }).click();
+  await expect(page.getByText("ESCAPE SUCCESS!")).toBeVisible({ timeout: 10_000 });
+  await expect(mission(page, "Reach the vault")).toHaveClass(/done/);
+  await expect(page.locator(".success-stats")).toContainText("Total extractions 2");
+});
+
+test("T09/T15: mug over the gap trips the lasers; running unguarded gets caught", async ({ page }) => {
+  await startSample(page);
+  await page.getByRole("radio", { name: "Recorded" }).click();
+  await steal(page, MUG);
+
+  await dropLoot(page, 0, 495, 380, 177);
+  await expect(mission(page, "Bridge the gap")).not.toHaveClass(/done/);
+  await expect(mission(page, "Bridge the gap")).toContainText("Trips the lasers");
+  await expect(page.locator(".why")).toContainText("Too thick");
+
+  await page.getByRole("button", { name: /RUN HEIST/ }).click();
+  await expect(page.locator(".mission [role=alert]")).toContainText("Caught!", { timeout: 10_000 });
+  // Loot stays where it was so the player can adjust (PRD §3.2 step 9).
+  await page.getByRole("button", { name: /Try again/ }).click();
+  await expect(page.locator(".slot.placed")).toHaveCount(1);
+});
+
+test("T06: moving the mug out of the rays un-checks the camera mission", async ({ page }) => {
+  await startSample(page);
+  await page.getByRole("radio", { name: "Recorded" }).click();
+  await steal(page, MUG);
+  await dropLoot(page, 0, 400, 200, 177);
+  await expect(mission(page, "Block the camera")).toHaveClass(/done/);
+
+  const from = await worldPoint(page, 400, 200);
+  const to = await worldPoint(page, 860, 150);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 10 });
+  await page.mouse.up();
+  await expect(mission(page, "Block the camera")).not.toHaveClass(/done/);
+  await expect(mission(page, "Block the camera")).toContainText("0/7");
+});
+
+test("T04/T11: Sam explains API failures and the game keeps going", async ({ page }) => {
+  const replies = [
+    { status: 429, body: { ok: false, code: "RATE_LIMIT", message: "SAM rate limit" } },
+    { status: 200, body: { ok: false, code: "NO_OBJECT", message: "no object at that point" } },
+  ];
+  await page.route("**/api/segment", (route) => {
+    const r = replies.shift()!;
+    return route.fulfill({ status: r.status, contentType: "application/json", body: JSON.stringify(r.body) });
+  });
+
+  await startSample(page); // Live Sam is the default
+  const p = await photoPoint(page, MUG);
+
+  await page.mouse.click(p.x, p.y);
+  await expect(page.locator(".sam-log .bubble").last()).toContainText("Too many requests");
+  await expect(page.getByRole("button", { name: "Ask again" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Use recorded cuts" })).toBeVisible();
+
+  await page.mouse.click(p.x, p.y);
+  await expect(page.locator(".sam-log .bubble").last()).toContainText("Couldn't find anything there");
+
+  // Recovery: switch to recorded cuts and steal the mug anyway.
+  await page.getByRole("radio", { name: "Recorded" }).click();
+  await steal(page, MUG);
+  await expect(page.locator(".slot-grab")).toHaveCount(1);
+});

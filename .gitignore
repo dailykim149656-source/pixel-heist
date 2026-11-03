@@ -10,3 +10,6 @@ public/sample/
 # Original AI-generated candidates; samples/desk.png is the shipped one, fixtures keep their own source.jpg
 samples/ChatGPT Image*
 .claude/settings.local.json
+.vercel
+test-results/
+playwright-report/

@@ -46,7 +46,7 @@ export function MissionPanel({ missions, settled, gameState, failure, hasLoot, h
           <p className="fineprint">Your loot stays put. Adjust it and try again.</p>
         </div>
       )}
-      {!failure && settled.gap.reason && settled.gap.span > 0 && <p className="why">{settled.gap.reason}</p>}
+      {!failure && settled.gap.reason && (settled.gap.span > 0 || settled.gap.tripsLaser) && <p className="why">{settled.gap.reason}</p>}
 
       <div className="hint-note">
         <span className="hint-label">Hint</span>
