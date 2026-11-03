@@ -40,7 +40,14 @@ export type Stage = {
   doors: Door[];
   beams: Beam[];
   vaultX: number;
+  /** How the room looks (Curator rooms only): the museum wing it's drawn as, and what's in the vault. */
+  look?: { theme: Theme; prize: Prize };
 };
+
+export const THEMES = ["classic", "egypt", "space", "dino", "modern"] as const;
+export const PRIZES = ["diamond", "crown", "golden egg", "painting"] as const;
+export type Theme = (typeof THEMES)[number];
+export type Prize = (typeof PRIZES)[number];
 
 const FLOOR = 430;
 const fullFloor: Floor[] = [{ x0: -10, x1: 970, y: FLOOR }];

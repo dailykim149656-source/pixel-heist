@@ -380,11 +380,11 @@ test("Ask Muse: hints come from the engine's facts, and skip what's already done
 });
 
 test("Curator's Challenge: Muse designs a room for this loot, the engine rejects an unfair one and accepts the redraw", async ({ page }) => {
-  const base = { title: "Hall of Echoes", curatorLine: "A long bar and something with a hole. Cute.", camera: { use: true, x: 620, need: 5 }, door: { use: false, x: 360, opener: "plate" }, beams: 0 };
-  // First design: a steep gap with no drawbridge and a door that needs a plate (desk A can't do both). Second: fair.
+  const base = { title: "Hall of Echoes", curatorLine: "A long bar and something with a hole. Cute.", theme: "egypt", prize: "crown" };
+  // First design: three obstacles for two cut-outs (rejected). Second: a hook door, then a gap — fair.
   const designs = [
-    { ...base, gap: { use: true, left: 480, width: 140, rise: 0, drawbridge: "none" }, door: { use: true, x: 360, opener: "hook" }, camera: { use: true, x: 620, need: 6 }, beams: 2 },
-    { ...base, gap: { use: true, left: 480, width: 120, rise: 0, drawbridge: "both" } },
+    { ...base, sections: [{ kind: "door", opener: "hook" }, { kind: "camera", need: 6, beams: 2 }, { kind: "gap", width: 140, rise: 0, drawbridge: "none" }] },
+    { ...base, sections: [{ kind: "door", opener: "hook" }, { kind: "gap", width: 120, rise: 0, drawbridge: "none" }] },
   ];
   const sent: { feedback?: string; loot: { ref: string; holes: number }[] }[] = [];
   await page.route("**/api/curator", async (route) => {

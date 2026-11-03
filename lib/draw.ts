@@ -41,14 +41,9 @@ function staticDrawables(stage: Stage): Drawable[] {
   const pencil = { stroke: INK, strokeWidth: 1.4, roughness: 1.3, seed: 7 + stage.id };
   const faint = { ...pencil, stroke: "#8b8378", strokeWidth: 1 };
   const d: Drawable[] = [];
-  // Museum backdrop: cornice and two arches.
+  // Museum backdrop: cornice, then the wing's own decoration (arches for the classic halls).
   d.push(g.line(0, 70, WORLD.width, 70, faint));
-  for (const cx of [190, 760]) {
-    const fy = floorY(stage, cx);
-    d.push(g.rectangle(cx - 70, 150, 22, fy - 150, faint));
-    d.push(g.rectangle(cx + 48, 150, 22, fy - 150, faint));
-    d.push(g.arc(cx, 150, 140, 120, Math.PI, Math.PI * 2, false, faint));
-  }
+  d.push(...backdrop(g, stage, faint));
   // Floors with hatching.
   const ledge = { ...pencil, fill: "#d9cfbf", fillStyle: "hachure", hachureGap: 9, fillWeight: 0.8 };
   for (const f of stage.floors) d.push(g.rectangle(f.x0, f.y, f.x1 - f.x0, WORLD.height - f.y + 10, ledge));
@@ -64,7 +59,7 @@ function staticDrawables(stage: Stage): Drawable[] {
   const vx = stage.vaultX, vy = floorY(stage, vx);
   d.push(g.rectangle(vx - 45, vy - 80, 90, 80, { ...pencil, fill: "#e6dccb", fillStyle: "hachure", hachureGap: 8 }));
   d.push(g.rectangle(vx - 52, vy - 88, 104, 10, pencil));
-  d.push(g.polygon([[vx - 26, vy - 120], [vx + 26, vy - 120], [vx + 36, vy - 108], [vx, vy - 92], [vx - 36, vy - 108]], { ...pencil, fill: "#cfe9f5", fillStyle: "solid" }));
+  d.push(...prize(g, stage.look?.prize ?? "diamond", vx, vy - 88, pencil));
   // Camera brackets.
   for (const c of stage.cameras) d.push(g.line(c.x + 34, 70, c.x + 20, c.y - 6, { ...pencil, strokeWidth: 3 }));
   // Door frames.
@@ -74,6 +69,93 @@ function staticDrawables(stage: Stage): Drawable[] {
   }
   statics.set(stage.id, d);
   return d;
+}
+
+type Gen = ReturnType<typeof rough.generator>;
+type Opts = Parameters<Gen["line"]>[4];
+
+/** Faint background drawings for each museum wing (Curator rooms pick one). */
+function backdrop(g: Gen, stage: Stage, faint: Opts): Drawable[] {
+  const d: Drawable[] = [];
+  const theme = stage.look?.theme ?? "classic";
+  if (theme === "classic") {
+    for (const cx of [190, 760]) {
+      const fy = floorY(stage, cx);
+      d.push(g.rectangle(cx - 70, 150, 22, fy - 150, faint));
+      d.push(g.rectangle(cx + 48, 150, 22, fy - 150, faint));
+      d.push(g.arc(cx, 150, 140, 120, Math.PI, Math.PI * 2, false, faint));
+    }
+  } else if (theme === "egypt") {
+    for (const [cx, w] of [[200, 220], [700, 180]]) {
+      const fy = floorY(stage, cx);
+      d.push(g.polygon([[cx - w / 2, fy], [cx, fy - w * 0.8], [cx + w / 2, fy]], faint));
+      for (let k = 1; k < 4; k++) d.push(g.line(cx - (w / 2) * (k / 4), fy - w * 0.8 * (1 - k / 4), cx + (w / 2) * (k / 4), fy - w * 0.8 * (1 - k / 4), faint));
+    }
+    // A row of glyphs under the cornice and a standing sarcophagus.
+    for (let x = 40; x < WORLD.width; x += 46) {
+      d.push(g.circle(x, 88, 10, faint));
+      d.push(g.line(x + 14, 80, x + 14, 96, faint));
+      d.push(g.line(x + 20, 96, x + 30, 82, faint));
+    }
+    const sx = 450, sy = floorY(stage, sx);
+    d.push(g.rectangle(sx - 22, sy - 150, 44, 150, faint));
+    d.push(g.ellipse(sx, sy - 125, 26, 32, faint));
+  } else if (theme === "space") {
+    d.push(g.circle(210, 190, 90, faint));
+    d.push(g.ellipse(210, 190, 170, 34, faint));
+    d.push(g.circle(330, 130, 26, faint));
+    const rx = 740, ry = floorY(stage, rx);
+    d.push(g.rectangle(rx - 22, ry - 200, 44, 170, faint));
+    d.push(g.polygon([[rx - 22, ry - 200], [rx, ry - 250], [rx + 22, ry - 200]], faint));
+    d.push(g.polygon([[rx - 22, ry - 70], [rx - 44, ry - 30], [rx - 22, ry - 30]], faint));
+    d.push(g.polygon([[rx + 22, ry - 70], [rx + 44, ry - 30], [rx + 22, ry - 30]], faint));
+    d.push(g.circle(rx, ry - 160, 18, faint));
+    for (const [x, y] of [[90, 110], [420, 100], [520, 160], [610, 110], [880, 140], [470, 230], [150, 290]]) {
+      d.push(g.line(x - 6, y, x + 6, y, faint));
+      d.push(g.line(x, y - 6, x, y + 6, faint));
+    }
+  } else if (theme === "dino") {
+    // A long-necked skeleton on a low plinth: spine, ribs, legs, neck and skull.
+    const bx = 330, fy = floorY(stage, bx);
+    d.push(g.rectangle(bx - 170, fy - 14, 340, 14, faint));
+    d.push(g.curve([[bx - 230, fy - 120], [bx - 120, fy - 175], [bx, fy - 180], [bx + 110, fy - 165], [bx + 170, fy - 230], [bx + 190, fy - 290]], faint));
+    for (let k = -100; k <= 80; k += 22) d.push(g.arc(bx + k, fy - 172, 26, 90, 0, Math.PI, false, faint));
+    for (const lx of [bx - 90, bx - 60, bx + 50, bx + 80]) d.push(g.line(lx, fy - 160, lx + (lx < bx ? -8 : 8), fy - 14, faint));
+    d.push(g.ellipse(bx + 205, fy - 296, 40, 20, faint));
+    d.push(g.curve([[bx - 230, fy - 120], [bx - 300, fy - 70], [bx - 330, fy - 40]], faint));
+  } else {
+    // Modern wing: framed abstracts and a stacked sculpture.
+    for (const [x, y, w, h] of [[110, 130, 130, 100], [300, 110, 90, 130], [600, 125, 150, 90]]) {
+      d.push(g.rectangle(x, y, w, h, faint));
+      d.push(g.rectangle(x + 8, y + 8, w - 16, h - 16, faint));
+      d.push(g.curve([[x + 16, y + h - 24], [x + w * 0.4, y + 24], [x + w * 0.6, y + h - 30], [x + w - 16, y + 20]], faint));
+      d.push(g.circle(x + w * 0.7, y + h * 0.65, Math.min(w, h) * 0.25, faint));
+    }
+    const sx = 790, fy = floorY(stage, sx);
+    d.push(g.rectangle(sx - 30, fy - 60, 60, 60, faint));
+    d.push(g.circle(sx, fy - 90, 56, faint));
+    d.push(g.polygon([[sx - 24, fy - 118], [sx, fy - 170], [sx + 24, fy - 118]], faint));
+  }
+  return d;
+}
+
+/** What sits on the vault pedestal, standing on `top`. */
+function prize(g: Gen, kind: NonNullable<Stage["look"]>["prize"], x: number, top: number, pencil: Opts): Drawable[] {
+  const gold = { ...pencil, fill: "#f1cf5b", fillStyle: "solid" } as Opts;
+  switch (kind) {
+    case "crown":
+      return [g.polygon([[x - 32, top - 4], [x + 32, top - 4], [x + 36, top - 40], [x + 18, top - 20], [x, top - 46], [x - 18, top - 20], [x - 36, top - 40]], gold)];
+    case "golden egg":
+      return [g.ellipse(x, top - 26, 40, 52, gold)];
+    case "painting":
+      return [
+        g.rectangle(x - 34, top - 62, 68, 56, { ...pencil, fill: "#e8d6b0", fillStyle: "solid" } as Opts),
+        g.rectangle(x - 26, top - 54, 52, 40, { ...pencil, fill: "#cfe9f5", fillStyle: "solid" } as Opts),
+        g.polygon([[x - 24, top - 16], [x - 6, top - 40], [x + 6, top - 26], [x + 14, top - 34], [x + 24, top - 16]], { ...pencil, fill: "#9fc98a", fillStyle: "solid" } as Opts),
+      ];
+    default:
+      return [g.polygon([[x - 26, top - 32], [x + 26, top - 32], [x + 36, top - 20], [x, top - 4], [x - 36, top - 20]], { ...pencil, fill: "#cfe9f5", fillStyle: "solid" } as Opts)];
+  }
 }
 
 export function drawScene(canvas: HTMLCanvasElement, scene: Scene) {

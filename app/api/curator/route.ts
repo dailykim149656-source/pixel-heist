@@ -1,4 +1,5 @@
 import { normalizeSpec, ROOM_SHAPE, type RoomSpec } from "@/lib/curator";
+import { PRIZES, THEMES } from "@/lib/stages";
 
 export const runtime = "nodejs";
 export const maxDuration = 45;
@@ -16,18 +17,17 @@ const CALLS_PER_HOUR = 30;
  * loot can beat it. When it can't, the engine's reason comes back here as feedback for one retry.
  */
 const INSTRUCTIONS = `You are the Curator, who drew every rule of a museum sketched in pencil. A thief has cut real objects out of photos and brought them in. Design one room to test exactly this loot.
-How the room works (the engine decides everything, by shape only):
-- camera: anything big enough held across its red rays blocks it; "need" is how many of 7 rays must be covered (higher is harder).
-- beams (needs a camera): sensor wires across the camera's view that nothing may touch. Only thin bars fit between two beams.
-- gap: crossed by laying a long, thin cut-out over it (thickness under about 40px, length about 150px or more). "rise" makes the far ledge higher, so the bar must be turned; 50 is hard, 0 is level.
-- drawbridge controls on the far side of a gap give other ways across: "plate" needs something solid and chunky (thickness 24px or more) resting on it; "hook" needs something with a real hole (holes >= 1).
-- door (before the gap): opened by its "plate" or "hook", same rules.
+A room is 1 to 3 sections, laid out left to right in the order you list them, in a museum wing ("theme") with a "prize" in the vault. The engine decides everything, by shape only:
+- camera: anything big enough held across its red rays blocks it; "need" is how many of 7 rays must be covered (higher is harder). "beams" are sensor wires across its view that nothing may touch; between two beams only thin bars fit.
+- gap: crossed by laying a long, thin cut-out over it (thickness under about 40px, length about 150px or more). "rise" moves the far ledge up (positive, the bar must be turned; 50 is hard) or down (negative). "drawbridge" puts controls on the far side that give other ways across: "plate" needs something solid and chunky (thickness 28px or more) resting on it; "hook" needs something with a real hole (holes >= 1).
+- door: opened by its "plate" or "hook" (same rules), placed just before the door.
 Design rules:
-- Every obstacle must be beatable by some cut-out in the loot, using a different cut-out for each job. Count them.
+- Each section needs its own cut-out, so use at most as many sections as the thief has cut-outs.
+- Every section must be beatable by some cut-out in the loot, a different one for each.
 - If the loot has 2 or more cut-outs, the room must need at least 2 of them.
 - Make each cut-out's shape matter: a hole means a hook somewhere, a long bar means a gap, a chunky block means a plate or the camera.
-- Prefer giving the gap more than one way across when the loot allows it.
-- The curatorLine taunts the thief about their loot by shape ("a long bar and something with a hole..."), never by object names.
+- Surprise the thief: vary the order, the wing and the prize from the obvious camera-then-gap.
+- The curatorLine taunts the thief about their loot by shape ("a long bar and something with a hole..."), never by object names, and may nod to the wing.
 Reply with one JSON object only, shaped: ${ROOM_SHAPE}`;
 
 const callLog = new Map<string, number[]>();
@@ -51,8 +51,11 @@ export async function POST(req: Request): Promise<Response> {
   if (recent.length >= CALLS_PER_HOUR) return Response.json({ ok: false, error: "RATE_LIMIT" }, { status: 429 });
   callLog.set(client, [...recent, now]);
 
+  // Left alone, Muse keeps choosing the same wing and prize; suggest one at random each time.
+  const pick = <T,>(xs: readonly T[]) => xs[Math.floor(Math.random() * xs.length)];
   const input = [
     `LOOT:\n${JSON.stringify(body.loot, null, 1)}`,
+    `This time, build it in the "${pick(THEMES)}" wing with the "${pick(PRIZES)}" in the vault, unless you have a better idea.`,
     body.previous && body.feedback
       ? `Your previous design was rejected by the engine.\nDESIGN: ${JSON.stringify(body.previous)}\nREASON: ${String(body.feedback).slice(0, 600)}\nDesign again and fix that.`
       : "",

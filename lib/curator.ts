@@ -2,83 +2,101 @@ import { describeShape, NEEDS } from "./hints";
 import type { Shape } from "./geometry";
 import type { PlanFacts } from "./hints";
 import { requirements } from "./solver";
-import type { Beam, Camera, Door, Floor, Gap, Hook, Plate, Stage } from "./stages";
+import { PRIZES, THEMES, type Beam, type Camera, type Door, type Floor, type Gap, type Hook, type Plate, type Prize, type Stage, type Theme } from "./stages";
 
 /**
  * The Curator's Challenge: Muse designs a room for the loot the player brought, inside the
  * parameters the engine supports. The engine compiles the design, then the plan search decides
  * whether this loot can actually beat it. Muse never gets to say a room is solvable.
  */
-export type RoomSpec = {
-  title: string;
-  curatorLine: string;
-  camera: { use: boolean; x: number; need: number };
-  gap: { use: boolean; left: number; width: number; rise: number; drawbridge: "none" | "plate" | "hook" | "both" };
-  door: { use: boolean; x: number; opener: "plate" | "hook" };
-  beams: number;
-};
+export type Section =
+  | { kind: "camera"; need: number; beams: number }
+  | { kind: "gap"; width: number; rise: number; drawbridge: "none" | "plate" | "hook" | "both" }
+  | { kind: "door"; opener: "plate" | "hook" };
+
+/** A room is up to three sections, left to right, in a museum wing of Muse's choosing. */
+export type RoomSpec = { title: string; curatorLine: string; theme: Theme; prize: Prize; sections: Section[] };
 
 /** The parameters the compiler can lay out safely, in one line for the prompt. */
 export const ROOM_SHAPE =
-  '{"title":string,"curatorLine":string,"camera":{"use":bool,"x":560..760,"need":4..6},"gap":{"use":bool,"left":440..560,"width":100..140,"rise":0..50,"drawbridge":"none"|"plate"|"hook"|"both"},"door":{"use":bool,"x":300..400,"opener":"plate"|"hook"},"beams":0..2}';
+  '{"title":string,"curatorLine":string,"theme":"classic"|"egypt"|"space"|"dino"|"modern","prize":"diamond"|"crown"|"golden egg"|"painting","sections":[1 to 3 of: {"kind":"camera","need":4..6,"beams":0..2} | {"kind":"gap","width":100..140,"rise":-40..50,"drawbridge":"none"|"plate"|"hook"|"both"} | {"kind":"door","opener":"plate"|"hook"}]}';
 
-/** Read whatever Muse sent into a RoomSpec: missing or odd fields fall back to "not used". */
+/** Read whatever Muse sent into a RoomSpec: odd fields fall back to defaults, unknown sections are dropped. */
 export function normalizeSpec(raw: unknown): RoomSpec {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, any>;
   const num = (v: unknown, d: number) => (typeof v === "number" && Number.isFinite(v) ? v : d);
   const pick = <T extends string>(v: unknown, opts: readonly T[], d: T) => (opts.includes(v as T) ? (v as T) : d);
+  const sections: Section[] = (Array.isArray(o.sections) ? o.sections : [])
+    .map((x: any): Section | null =>
+      x?.kind === "camera"
+        ? { kind: "camera", need: num(x.need, 5), beams: num(x.beams, 0) }
+        : x?.kind === "gap"
+          ? { kind: "gap", width: num(x.width, 120), rise: num(x.rise, 0), drawbridge: pick(x.drawbridge, ["none", "plate", "hook", "both"] as const, "none") }
+          : x?.kind === "door"
+            ? { kind: "door", opener: pick(x.opener, ["plate", "hook"] as const, "plate") }
+            : null,
+    )
+    .filter((x: Section | null): x is Section => x !== null)
+    .slice(0, 3);
   return {
     title: typeof o.title === "string" ? o.title : "The Curator's Room",
     curatorLine: typeof o.curatorLine === "string" ? o.curatorLine : "Let's see what reality is worth.",
-    camera: { use: o.camera?.use === true, x: num(o.camera?.x, 640), need: num(o.camera?.need, 5) },
-    gap: {
-      use: o.gap?.use === true,
-      left: num(o.gap?.left, 480),
-      width: num(o.gap?.width, 120),
-      rise: num(o.gap?.rise, 0),
-      drawbridge: pick(o.gap?.drawbridge, ["none", "plate", "hook", "both"] as const, "none"),
-    },
-    door: { use: o.door?.use === true, x: num(o.door?.x, 360), opener: pick(o.door?.opener, ["plate", "hook"] as const, "plate") },
-    beams: num(o.beams, 0),
+    theme: pick(o.theme, THEMES, "classic"),
+    prize: pick(o.prize, PRIZES, "diamond"),
+    sections,
   };
 }
 
-const FLOOR = 430, VAULT_X = 890;
+const FLOOR = 430, VAULT_X = 890, START = 140, END = 830;
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, Math.round(v)));
 
-/** Lay the design out on the 960×540 sketch, clamping everything into safe ranges. */
+/**
+ * Lay the sections out left to right in equal zones between the thief and the vault, clamping
+ * every number into a safe range. Gaps change the floor height for everything after them.
+ */
 export function compileRoom(spec: RoomSpec, id: number): Stage {
   const floors: Floor[] = [], cameras: Camera[] = [], gaps: Gap[] = [], plates: Plate[] = [], hooks: Hook[] = [], doors: Door[] = [], beams: Beam[] = [];
-  let farY = FLOOR;
-  let gapLeft = 970;
-  if (spec.gap.use) {
-    const left = clamp(spec.gap.left, 440, 560), right = left + clamp(spec.gap.width, 100, 140);
-    farY = FLOOR - clamp(spec.gap.rise, 0, 50);
-    gapLeft = left;
-    floors.push({ x0: -10, x1: left, y: FLOOR }, { x0: right, x1: 970, y: farY });
-    gaps.push({ id: "gap", left, right, yLeft: FLOOR, yRight: farY, support: 12, slotAbove: 40, slotBelow: 8 });
-    // Drawbridge controls sit on the far ledge, past the gap, short of the vault.
-    if (spec.gap.drawbridge === "plate" || spec.gap.drawbridge === "both") plates.push({ id: "bridge-plate", x: right + 25, width: 100, y: farY, cover: 0.7, opens: "gap" });
-    if (spec.gap.drawbridge === "hook" || spec.gap.drawbridge === "both") hooks.push({ id: "bridge-hook", x: Math.min(right + 120, 790), y: 200, opens: "gap" });
-  } else floors.push({ x0: -10, x1: 970, y: FLOOR });
-
-  if (spec.door.use) {
-    const x = clamp(spec.door.x, 300, Math.min(400, gapLeft - 70));
-    doors.push({ id: "door", x });
-    if (spec.door.opener === "plate") plates.push({ id: "door-plate", x: 110, width: Math.min(120, x - 150), y: FLOOR, cover: 0.7, opens: "door" });
-    else hooks.push({ id: "door-hook", x: x - 130, y: 170, opens: "door" });
-  }
-
-  if (spec.camera.use) {
-    const x = clamp(spec.camera.x, 560, 760);
-    const toX = Math.min(x - 210, gapLeft - 40), fromX = Math.max(110, toX - 240);
-    cameras.push({ id: "cam", x, y: 92, fromX, toX, targetY: FLOOR - 46, rays: 7, need: clamp(spec.camera.need, 4, 6), forbiddenRadius: 80 });
-    const ys = [[], [280], [230, 330]][clamp(spec.beams, 0, 2)];
-    ys.forEach((y, i) => beams.push({ id: `beam-${i + 1}`, x0: fromX - 20, y0: y, x1: x - 40, y1: y }));
-  }
-
+  const zone = (END - START) / Math.max(1, spec.sections.length);
+  let y = FLOOR, floorFrom = -10;
+  spec.sections.forEach((sec, i) => {
+    const a = START + i * zone, b = a + zone, n = i + 1;
+    if (sec.kind === "camera") {
+      // Mounted just past its own zone, so it never crowds the next section's hook.
+      const x = clamp(b + 40, 300, 900), fromX = Math.round(a + 15), toX = Math.round(b - 45), targetY = y - 46;
+      cameras.push({ id: `cam-${n}`, x, y: 92, fromX, toX, targetY, rays: 7, need: clamp(sec.need, 4, 6), forbiddenRadius: 80 });
+      const at = [[], [0.5], [0.47, 0.81]][clamp(sec.beams, 0, 2)];
+      at.forEach((f, k) => {
+        const by = Math.round(92 + (targetY - 92) * f);
+        beams.push({ id: `beam-${n}-${k + 1}`, x0: Math.round(a - 20), y0: by, x1: x - 40, y1: by });
+      });
+    } else if (sec.kind === "gap") {
+      const width = clamp(sec.width, 100, Math.min(140, zone - 40));
+      const withPlate = sec.drawbridge === "plate" || sec.drawbridge === "both";
+      // Centred in its zone, but shifted left when its far-side plate would run into the vault.
+      const left = Math.round(Math.min(a + (zone - width) / 2, withPlate ? END - 100 - width : Infinity)), right = left + width;
+      const yNext = clamp(y - sec.rise, 340, 470);
+      floors.push({ x0: floorFrom, x1: left, y });
+      gaps.push({ id: `gap-${n}`, left, right, yLeft: y, yRight: yNext, support: 12, slotAbove: 40, slotBelow: 8 });
+      // Drawbridge controls on the far ledge: a plate on the floor, a hook up high.
+      if (withPlate) plates.push({ id: `gap-${n}-plate`, x: right + 10, width: 90, y: yNext, cover: 0.7, opens: `gap-${n}` });
+      if (sec.drawbridge === "hook" || sec.drawbridge === "both") hooks.push({ id: `gap-${n}-hook`, x: Math.min(right + 70, 800), y: 200, opens: `gap-${n}` });
+      y = yNext;
+      floorFrom = right;
+    } else {
+      // A door at the far end of its zone, with its opener before it.
+      const x = Math.round(a + zone * 0.72);
+      doors.push({ id: `door-${n}`, x });
+      if (sec.opener === "plate") plates.push({ id: `door-${n}-plate`, x: Math.round(a + 10), width: Math.min(120, x - Math.round(a + 10) - 40), y, cover: 0.7, opens: `door-${n}` });
+      else hooks.push({ id: `door-${n}-hook`, x: x - 30, y: 190, opens: `door-${n}` });
+    }
+  });
+  floors.push({ x0: floorFrom, x1: 970, y });
   const name = spec.title.trim().slice(0, 40) || "The Curator's Room";
-  return { id, name, teaser: spec.curatorLine.trim().slice(0, 200), floors, cameras, gaps, plates, hooks, doors, beams, vaultX: VAULT_X };
+  return {
+    id, name, teaser: spec.curatorLine.trim().slice(0, 200),
+    floors, cameras, gaps, plates, hooks, doors, beams, vaultX: VAULT_X,
+    look: { theme: spec.theme, prize: spec.prize },
+  };
 }
 
 /** What Muse is told about the loot: shapes and measurements only, never names. */

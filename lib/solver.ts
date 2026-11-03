@@ -24,25 +24,30 @@ export function first(gen: Iterable<Placement>, ok: (p: Placement) => boolean = 
 }
 
 /** Spots that block `cam` without touching any other device. */
-export function* cameraCandidates(stage: Stage, cam: Camera, shape: Shape): Generator<Placement> {
+export function* cameraCandidates(stage: Stage, cam: Camera, shape: Shape, coarse = false): Generator<Placement> {
   const region = { x0: Math.min(cam.fromX, cam.x) - 40, x1: cam.x + 60, y0: cam.y, y1: cam.targetY };
-  for (const p of placementsIn(shape, region))
+  for (const p of placementsIn(shape, region, coarse ? 20 : 10))
     if (!placementProblem(stage, p) && judgeCamera(cam, [p]).blocked && quietElsewhere(stage, p)) yield p;
 }
 
 /** What a player does at a gap: drop the item over it at every rotation and let it snap. */
 export function* gapPlacements(stage: Stage, gap: Gap, shape: Shape, coarse = false): Generator<Placement> {
-  // Coarse steps still land every drop: the snap re-centres over the gap and rests on the line.
-  const dx = coarse ? 15 : 5, dy = coarse ? 30 : 20;
+  if (coarse) {
+    // The drop snap centres a bridge-shaped item over the gap and settles it onto the ledges
+    // (trying it flipped too), so one drop per rotation, from just above, covers every outcome.
+    const x = (gap.left + gap.right) / 2, line = (gap.yLeft + gap.yRight) / 2;
+    for (const rotationDeg of ROTATIONS) for (const y of [line - 30, line + 5]) yield snapPlacement(stage, { shape, x, y, rotationDeg });
+    return;
+  }
   for (const rotationDeg of ROTATIONS)
-    for (let x = gap.left - 40; x <= gap.right + 40; x += dx)
-      for (let y = Math.min(gap.yLeft, gap.yRight) - 120; y <= Math.max(gap.yLeft, gap.yRight) + 60; y += dy)
+    for (let x = gap.left - 40; x <= gap.right + 40; x += 5)
+      for (let y = Math.min(gap.yLeft, gap.yRight) - 120; y <= Math.max(gap.yLeft, gap.yRight) + 60; y += 20)
         yield snapPlacement(stage, { shape, x, y, rotationDeg });
 }
 
-export function* plateCandidates(stage: Stage, plate: Plate, shape: Shape): Generator<Placement> {
+export function* plateCandidates(stage: Stage, plate: Plate, shape: Shape, coarse = false): Generator<Placement> {
   for (const rotationDeg of ROTATIONS)
-    for (let x = plate.x; x <= plate.x + plate.width; x += 5)
+    for (let x = plate.x; x <= plate.x + plate.width; x += coarse ? 15 : 5)
       for (let y = plate.y - 140; y <= plate.y - 10; y += 15) {
         const p = snapPlacement(stage, { shape, x, y, rotationDeg });
         if (!placementProblem(stage, p) && judgePlate(plate, [p]).covered) yield p;
@@ -97,11 +102,11 @@ export function placementFor(stage: Stage, job: Job, shape: Shape, deadline = In
   const clearOfBeams = (p: Placement) => stage.beams.every((b) => !judgeBeam(b, [p]).tripped);
   const gen: Iterable<Placement> =
     job.kind === "camera"
-      ? cameraCandidates(stage, stage.cameras.find((c) => c.id === job.id)!, shape)
+      ? cameraCandidates(stage, stage.cameras.find((c) => c.id === job.id)!, shape, true)
       : job.kind === "bridge"
         ? gapPlacements(stage, stage.gaps.find((g) => g.id === job.id)!, shape, true)
         : job.kind === "plate"
-          ? plateCandidates(stage, stage.plates.find((p) => p.id === job.id)!, shape)
+          ? plateCandidates(stage, stage.plates.find((p) => p.id === job.id)!, shape, true)
           : hookCandidates(stage, stage.hooks.find((h) => h.id === job.id)!, shape);
   const ok = (p: Placement) => {
     if (placementProblem(stage, p) || !clearOfBeams(p)) return false;
@@ -123,7 +128,8 @@ export function placementFor(stage: Stage, job: Job, shape: Shape, deadline = In
 function couldDo(stage: Stage, job: Job, shape: Shape) {
   const m = shape.metrics;
   if (job.kind === "hook") return shape.holeAnchors.length > 0;
-  if (job.kind === "plate") return m.thicknessPx >= 24;
+  // The plate needs 70% of a 40px strip covered, so anything under 28px thick can't do it.
+  if (job.kind === "plate") return m.thicknessPx >= 28;
   if (job.kind === "bridge") {
     const g = stage.gaps.find((x) => x.id === job.id)!;
     return m.thicknessPx <= g.slotAbove + g.slotBelow && m.longestUnbrokenSpanPx >= g.right - g.left + 2 * g.support - 8;
