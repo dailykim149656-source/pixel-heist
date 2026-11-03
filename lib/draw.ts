@@ -3,9 +3,10 @@
 import rough from "roughjs";
 import type { Drawable } from "roughjs/bin/core";
 import { occupiedBounds, type Placement } from "./geometry";
-import type { Judgement } from "./judge";
+import { gapLineY, type Judgement } from "./judge";
 import { SPRITE_RES } from "./loot";
-import { CAMERA, FLOOR_Y, GAP, THIEF, VAULT, WORLD } from "./stage";
+import { WORLD } from "./stage";
+import type { Camera, Gap, Stage } from "./stages";
 
 export const INK = "#3f3a34";
 export const PAPER = "#f7f1e6";
@@ -17,55 +18,66 @@ export const XRAY = "#ff8c00";
 type Sprite = { placement: Placement; sprite: HTMLCanvasElement };
 
 export type Scene = {
+  stage: Stage;
   placed: Sprite[];
   candidate: (Sprite & { status: "invalid" | "useful" | "neutral" }) | null;
   live: Judgement; // includes the candidate
-  missions: { cameraBlocked: boolean; gapBridged: boolean };
-  thief: { x: number; y: number; pose: "idle" | "run" | "caught" | "fell" | "won"; t: number };
+  settled: Judgement; // placed items only
+  thief: { x: number; y: number; pose: "idle" | "run" | "caught" | "fell" | "stuck" | "won"; t: number };
   /** X-ray: box-only colliders for the same placements, and how they'd be judged. */
   xray: { boxes: Placement[]; judged: Judgement } | null;
 };
 
-let statics: Drawable[] | null = null;
+const statics = new Map<number, Drawable[]>();
 
-function staticDrawables(): Drawable[] {
-  if (statics) return statics;
+function floorY(stage: Stage, x: number) {
+  return stage.floors.find((f) => x >= f.x0 && x <= f.x1)?.y ?? stage.floors[0].y;
+}
+
+function staticDrawables(stage: Stage): Drawable[] {
+  const cached = statics.get(stage.id);
+  if (cached) return cached;
   const g = rough.generator();
-  const pencil = { stroke: INK, strokeWidth: 1.4, roughness: 1.3, seed: 7 };
+  const pencil = { stroke: INK, strokeWidth: 1.4, roughness: 1.3, seed: 7 + stage.id };
   const faint = { ...pencil, stroke: "#8b8378", strokeWidth: 1 };
   const d: Drawable[] = [];
-  // Museum: two arches and a cornice.
+  // Museum backdrop: cornice and two arches.
   d.push(g.line(0, 70, WORLD.width, 70, faint));
   for (const cx of [190, 760]) {
-    d.push(g.rectangle(cx - 70, 150, 22, FLOOR_Y - 150, faint));
-    d.push(g.rectangle(cx + 48, 150, 22, FLOOR_Y - 150, faint));
+    const fy = floorY(stage, cx);
+    d.push(g.rectangle(cx - 70, 150, 22, fy - 150, faint));
+    d.push(g.rectangle(cx + 48, 150, 22, fy - 150, faint));
     d.push(g.arc(cx, 150, 140, 120, Math.PI, Math.PI * 2, false, faint));
   }
-  // Floor ledges with hatching.
+  // Floors with hatching.
   const ledge = { ...pencil, fill: "#d9cfbf", fillStyle: "hachure", hachureGap: 9, fillWeight: 0.8 };
-  d.push(g.rectangle(-10, FLOOR_Y, GAP.left + 10, WORLD.height - FLOOR_Y + 10, ledge));
-  d.push(g.rectangle(GAP.right, FLOOR_Y, WORLD.width - GAP.right + 10, WORLD.height - FLOOR_Y + 10, ledge));
-  // Gap: cross-hatched darkness.
-  d.push(
-    g.rectangle(GAP.left + 4, FLOOR_Y + 14, GAP.right - GAP.left - 8, WORLD.height - FLOOR_Y, {
-      ...pencil, stroke: "none", fill: "#5c544a", fillStyle: "cross-hatch", hachureGap: 7,
-    }),
-  );
-  // Laser posts.
+  for (const f of stage.floors) d.push(g.rectangle(f.x0, f.y, f.x1 - f.x0, WORLD.height - f.y + 10, ledge));
+  // Gaps: cross-hatched darkness and laser posts.
   const post = { ...pencil, fill: "#bdb3a4", fillStyle: "solid" };
-  for (const x of [GAP.left - 8, GAP.right + 2]) d.push(g.rectangle(x, GAP.slotTop - 10, 6, GAP.slotBottom - GAP.slotTop + 20, post));
+  for (const gp of stage.gaps) {
+    const top = Math.max(gp.yLeft, gp.yRight) + 14;
+    d.push(g.rectangle(gp.left + 4, top, gp.right - gp.left - 8, WORLD.height - top, { ...pencil, stroke: "none", fill: "#5c544a", fillStyle: "cross-hatch", hachureGap: 7 }));
+    d.push(g.rectangle(gp.left - 8, gp.yLeft - gp.slotAbove - 10, 6, gp.slotAbove + gp.slotBelow + 20, post));
+    d.push(g.rectangle(gp.right + 2, gp.yRight - gp.slotAbove - 10, 6, gp.slotAbove + gp.slotBelow + 20, post));
+  }
   // Vault pedestal and diamond.
-  const vx = VAULT.x;
-  d.push(g.rectangle(vx - 45, FLOOR_Y - 80, 90, 80, { ...pencil, fill: "#e6dccb", fillStyle: "hachure", hachureGap: 8 }));
-  d.push(g.rectangle(vx - 52, FLOOR_Y - 88, 104, 10, pencil));
-  d.push(g.polygon([[vx - 26, FLOOR_Y - 120], [vx + 26, FLOOR_Y - 120], [vx + 36, FLOOR_Y - 108], [vx, FLOOR_Y - 92], [vx - 36, FLOOR_Y - 108]], { ...pencil, fill: "#cfe9f5", fillStyle: "solid" }));
-  // Camera on its bracket, aimed down-left.
-  d.push(g.line(CAMERA.x + 34, 70, CAMERA.x + 20, CAMERA.y - 6, { ...pencil, strokeWidth: 3 }));
-  statics = d;
+  const vx = stage.vaultX, vy = floorY(stage, vx);
+  d.push(g.rectangle(vx - 45, vy - 80, 90, 80, { ...pencil, fill: "#e6dccb", fillStyle: "hachure", hachureGap: 8 }));
+  d.push(g.rectangle(vx - 52, vy - 88, 104, 10, pencil));
+  d.push(g.polygon([[vx - 26, vy - 120], [vx + 26, vy - 120], [vx + 36, vy - 108], [vx, vy - 92], [vx - 36, vy - 108]], { ...pencil, fill: "#cfe9f5", fillStyle: "solid" }));
+  // Camera brackets.
+  for (const c of stage.cameras) d.push(g.line(c.x + 34, 70, c.x + 20, c.y - 6, { ...pencil, strokeWidth: 3 }));
+  // Door frames.
+  for (const door of stage.doors) {
+    const fy = floorY(stage, door.x);
+    d.push(g.rectangle(door.x - 16, fy - 150, 32, 150, { ...pencil, strokeWidth: 2 }));
+  }
+  statics.set(stage.id, d);
   return d;
 }
 
 export function drawScene(canvas: HTMLCanvasElement, scene: Scene) {
+  const { stage } = scene;
   const ctx = canvas.getContext("2d")!;
   const k = canvas.width / WORLD.width;
   ctx.setTransform(k, 0, 0, k, 0, 0);
@@ -74,21 +86,26 @@ export function drawScene(canvas: HTMLCanvasElement, scene: Scene) {
   paperTexture(ctx);
 
   const rc = rough.canvas(canvas);
-  for (const d of staticDrawables()) rc.draw(d);
+  for (const d of staticDrawables(stage)) rc.draw(d);
 
-  drawLasers(ctx, scene);
-  drawRays(ctx, scene.live);
-  drawCamera(ctx);
+  stage.plates.forEach((p, i) => drawPlate(ctx, p, scene.live.plates[i].covered));
+  stage.hooks.forEach((h) => drawHook(ctx, h, stage));
+  stage.doors.forEach((d) => drawDoor(ctx, d.x, floorY(stage, d.x), scene.live.doors[d.id]));
+  stage.gaps.forEach((g, i) => drawLasers(ctx, g, scene.live.gaps[i].tripsLaser));
+  stage.cameras.forEach((c, i) => {
+    drawRays(ctx, c, scene.live.cameras[i].rays);
+    drawCamera(ctx, c);
+  });
 
   for (const s of scene.placed) drawSprite(ctx, s, 1);
   if (scene.candidate) {
     drawSprite(ctx, scene.candidate, 0.85);
     outline(ctx, scene.candidate.placement, scene.candidate.status);
   }
-  drawWalkSpan(ctx, scene.live);
+  stage.gaps.forEach((g, i) => drawWalkSpan(ctx, g, scene.live.gaps[i]));
   if (scene.xray) drawXray(ctx, scene.xray);
   drawThief(ctx, scene.thief);
-  stickers(ctx, scene.missions);
+  stickers(ctx, scene);
 }
 
 function paperTexture(ctx: CanvasRenderingContext2D) {
@@ -102,11 +119,10 @@ function paperTexture(ctx: CanvasRenderingContext2D) {
   }
 }
 
-function drawCamera(ctx: CanvasRenderingContext2D) {
+function drawCamera(ctx: CanvasRenderingContext2D, c: Camera) {
   ctx.save();
-  ctx.translate(CAMERA.x, CAMERA.y);
-  const aim = Math.atan2(CAMERA.targetY - CAMERA.y, (CAMERA.targetFromX + CAMERA.targetToX) / 2 - CAMERA.x);
-  ctx.rotate(aim);
+  ctx.translate(c.x, c.y);
+  ctx.rotate(Math.atan2(c.targetY - c.y, (c.fromX + c.toX) / 2 - c.x));
   ctx.fillStyle = "#ece4d6";
   ctx.strokeStyle = INK;
   ctx.lineWidth = 2;
@@ -121,12 +137,10 @@ function drawCamera(ctx: CanvasRenderingContext2D) {
   ctx.restore();
 }
 
-function drawRays(ctx: CanvasRenderingContext2D, j: Judgement) {
-  const rays = j.camera.rays;
-  // Soft fan behind the rays.
+function drawRays(ctx: CanvasRenderingContext2D, c: Camera, rays: Judgement["cameras"][number]["rays"]) {
   ctx.fillStyle = "rgba(216, 55, 43, 0.08)";
   ctx.beginPath();
-  ctx.moveTo(CAMERA.x, CAMERA.y);
+  ctx.moveTo(c.x, c.y);
   for (const r of rays) ctx.lineTo(r.blockedAt?.x ?? r.to.x, r.blockedAt?.y ?? r.to.y);
   ctx.closePath();
   ctx.fill();
@@ -150,29 +164,83 @@ function drawRays(ctx: CanvasRenderingContext2D, j: Judgement) {
   ctx.setLineDash([]);
 }
 
-function drawLasers(ctx: CanvasRenderingContext2D, scene: Scene) {
-  const tripped = scene.live.gap.tripsLaser;
+function drawLasers(ctx: CanvasRenderingContext2D, g: Gap, tripped: boolean) {
   ctx.strokeStyle = tripped ? ALERT : "rgba(216, 55, 43, 0.75)";
   ctx.lineWidth = tripped ? 3 : 2;
-  for (const y of [GAP.slotTop, GAP.slotBottom]) {
+  for (const off of [-g.slotAbove, g.slotBelow]) {
     ctx.beginPath();
-    ctx.moveTo(GAP.left - 2, y);
-    ctx.lineTo(GAP.right + 2, y);
+    ctx.moveTo(g.left - 2, g.yLeft + off);
+    ctx.lineTo(g.right + 2, g.yRight + off);
     ctx.stroke();
   }
 }
 
-function drawWalkSpan(ctx: CanvasRenderingContext2D, j: Judgement) {
-  if (j.gap.span === 0 || j.gap.tripsLaser) return;
-  const from = GAP.left - GAP.support;
-  ctx.strokeStyle = j.gap.span >= j.gap.spanNeeded ? OK : "#e2a400";
+function drawWalkSpan(ctx: CanvasRenderingContext2D, g: Gap, r: Judgement["gaps"][number]) {
+  if (r.span === 0 || r.tripsLaser) return;
+  const from = g.left - g.support, to = from + r.span;
+  ctx.strokeStyle = r.span >= r.spanNeeded ? OK : "#e2a400";
   ctx.lineWidth = 4;
   ctx.lineCap = "round";
   ctx.beginPath();
-  ctx.moveTo(from, FLOOR_Y - 2);
-  ctx.lineTo(from + j.gap.span, FLOOR_Y - 2);
+  ctx.moveTo(from, gapLineY(g, from) - 2);
+  ctx.lineTo(to, gapLineY(g, to) - 2);
   ctx.stroke();
   ctx.lineCap = "butt";
+}
+
+function drawPlate(ctx: CanvasRenderingContext2D, p: Stage["plates"][number], covered: boolean) {
+  ctx.save();
+  ctx.fillStyle = covered ? "#bfe3a6" : "#e9c46a";
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2;
+  roundRect(ctx, p.x, p.y - (covered ? 3 : 8), p.width, covered ? 6 : 10, 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.font = `13px ${handFont()}`;
+  ctx.fillStyle = INK;
+  ctx.fillText("PLATE", p.x + p.width / 2 - 18, p.y + 22);
+  ctx.restore();
+}
+
+function drawHook(ctx: CanvasRenderingContext2D, h: Stage["hooks"][number], stage: Stage) {
+  const door = stage.doors.find((d) => d.id === h.opens);
+  ctx.save();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = "round";
+  // Rope from the ceiling through a pulley to the gate.
+  ctx.setLineDash([2, 4]);
+  ctx.beginPath();
+  ctx.moveTo(h.x, 70);
+  ctx.lineTo(h.x, h.y - 14);
+  if (door) {
+    ctx.moveTo(h.x, 70);
+    ctx.lineTo(door.x, 70);
+    ctx.lineTo(door.x, floorY(stage, door.x) - 150);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+  // The hook itself: a J that the hole must slip over.
+  ctx.beginPath();
+  ctx.moveTo(h.x, h.y - 14);
+  ctx.lineTo(h.x, h.y + 4);
+  ctx.arc(h.x - 7, h.y + 4, 7, 0, Math.PI, false);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawDoor(ctx: CanvasRenderingContext2D, x: number, fy: number, open: boolean) {
+  ctx.save();
+  const lift = open ? 120 : 0;
+  ctx.strokeStyle = open ? "rgba(63,58,52,0.35)" : INK;
+  ctx.lineWidth = 3;
+  for (let bx = x - 10; bx <= x + 10; bx += 7) {
+    ctx.beginPath();
+    ctx.moveTo(bx, fy - 148);
+    ctx.lineTo(bx, fy - lift);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawXray(ctx: CanvasRenderingContext2D, x: NonNullable<Scene["xray"]>) {
@@ -192,12 +260,13 @@ function drawXray(ctx: CanvasRenderingContext2D, x: NonNullable<Scene["xray"]>) 
   }
   // Where the box would stop each ray.
   ctx.fillStyle = XRAY;
-  for (const r of x.judged.camera.rays)
-    if (r.blockedAt) {
-      ctx.beginPath();
-      ctx.arc(r.blockedAt.x, r.blockedAt.y, 3.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
+  for (const cam of x.judged.cameras)
+    for (const r of cam.rays)
+      if (r.blockedAt) {
+        ctx.beginPath();
+        ctx.arc(r.blockedAt.x, r.blockedAt.y, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
   ctx.font = `18px ${handFont()}`;
   ctx.fillStyle = "#b35c00";
   ctx.fillText("X-RAY — orange = bounding box only", 14, 26);
@@ -243,14 +312,12 @@ function drawThief(ctx: CanvasRenderingContext2D, thief: Scene["thief"]) {
   ctx.lineWidth = 3.2;
   ctx.lineCap = "round";
   const stride = pose === "run" ? Math.sin(t / 70) * 14 : 0;
-  // legs, body, arms
   line(ctx, 0, -30, -8 - stride, 0);
   line(ctx, 0, -30, 8 + stride, 0);
   line(ctx, 0, -30, 2, -55);
   const armUp = pose === "won" || pose === "caught" ? -22 : 0;
   line(ctx, 1, -50, -14 + stride * 0.6, -36 + armUp);
   line(ctx, 1, -50, 16 - stride * 0.6, -38 + armUp);
-  // head + mask band
   ctx.fillStyle = PAPER;
   ctx.beginPath();
   ctx.arc(3, -66, 11, 0, Math.PI * 2);
@@ -258,13 +325,17 @@ function drawThief(ctx: CanvasRenderingContext2D, thief: Scene["thief"]) {
   ctx.stroke();
   ctx.fillStyle = INK;
   ctx.fillRect(-8, -70, 22, 6);
-  // loot sack
   ctx.fillStyle = "#cbbfa9";
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.ellipse(-12, -48, 9, 11, -0.3, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
+  if (pose === "stuck") {
+    ctx.font = `20px ${handFont()}`;
+    ctx.fillStyle = INK;
+    ctx.fillText("?!", 12, -82);
+  }
   ctx.restore();
   if (pose === "caught") {
     ctx.fillStyle = "rgba(216, 55, 43, 0.12)";
@@ -272,9 +343,12 @@ function drawThief(ctx: CanvasRenderingContext2D, thief: Scene["thief"]) {
   }
 }
 
-function stickers(ctx: CanvasRenderingContext2D, m: Scene["missions"]) {
-  if (m.cameraBlocked) sticker(ctx, CAMERA.x - 190, CAMERA.y - 50, "Camera blocked ✓");
-  if (m.gapBridged) sticker(ctx, GAP.left - 10, FLOOR_Y + 40, "Bridge ✓");
+function stickers(ctx: CanvasRenderingContext2D, scene: Scene) {
+  const { stage, settled } = scene;
+  stage.cameras.forEach((c, i) => settled.cameras[i].blocked && sticker(ctx, c.x - 190, c.y - 50, "Camera blocked ✓"));
+  stage.gaps.forEach((g, i) => settled.gaps[i].bridged && sticker(ctx, g.left - 10, Math.max(g.yLeft, g.yRight) + 40, "Bridge ✓"));
+  stage.plates.forEach((p, i) => settled.plates[i].covered && sticker(ctx, p.x, p.y + 40, "Plate down ✓"));
+  stage.hooks.forEach((h, i) => settled.hooks[i].hung && sticker(ctx, h.x + 20, h.y - 60, "Hooked ✓"));
 }
 
 function sticker(ctx: CanvasRenderingContext2D, x: number, y: number, text: string) {
@@ -313,4 +387,3 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.roundRect(x, y, w, h, r);
 }
 
-export const THIEF_START = { x: THIEF.startX, y: FLOOR_Y };

@@ -10,6 +10,10 @@ export type Mask = { width: number; height: number; data: Uint8Array };
  */
 export type Shape = {
   grid: Mask;
+  /** Enclosed empty regions of the grid (1 = inside a hole), e.g. a mug handle or scissor loops. */
+  holes: Mask;
+  /** Where a hook catches each hole: its centroid column, a little below the hole's top. Grid coords. */
+  holeAnchors: { x: number; y: number }[];
   deskewDeg: number;
   anisotropy: number;
   toSource: { scale: number; minX: number; minY: number; cx: number; cy: number; thetaRad: number };
@@ -89,6 +93,7 @@ export function normalizeShape(mask: Mask, baseMaxSide = BASE_MAX_SIDE): Shape {
   const grid = { width, height, data };
   return {
     grid,
+    ...findHoles(grid),
     deskewDeg,
     anisotropy,
     toSource: { scale, minX, minY, cx, cy, thetaRad },
@@ -188,6 +193,8 @@ export function boxShape(mask: Mask, scale: number): Shape {
   const grid = { width, height, data: new Uint8Array(width * height).fill(1) };
   return {
     grid,
+    holes: { width, height, data: new Uint8Array(width * height) },
+    holeAnchors: [],
     deskewDeg: 0,
     anisotropy: Math.max(width, height) / Math.min(width, height),
     toSource: { scale, minX: -mask.width / 2, minY: -mask.height / 2, cx: mask.width / 2, cy: mask.height / 2, thetaRad: 0 },
@@ -210,4 +217,70 @@ export function boxPlacement(p: Placement, box: Shape): Placement {
     y: p.y + gx * Math.sin(r) + gy * Math.cos(r),
     rotationDeg: p.rotationDeg + (t.thetaRad * 180) / Math.PI,
   };
+}
+
+const MIN_HOLE_CELLS = 40;
+
+/** Empty cells not reachable from the border (4-connected), grouped into holes of a usable size. */
+export function findHoles(grid: Mask): { holes: Mask; holeAnchors: { x: number; y: number }[] } {
+  const { width: W, height: H } = grid;
+  const outside = new Uint8Array(W * H);
+  const stack: number[] = [];
+  for (let x = 0; x < W; x++) stack.push(x, (H - 1) * W + x);
+  for (let y = 0; y < H; y++) stack.push(y * W, y * W + W - 1);
+  while (stack.length) {
+    const i = stack.pop()!;
+    if (outside[i] || grid.data[i]) continue;
+    outside[i] = 1;
+    const x = i % W;
+    if (x > 0) stack.push(i - 1);
+    if (x < W - 1) stack.push(i + 1);
+    if (i >= W) stack.push(i - W);
+    if (i < W * (H - 1)) stack.push(i + W);
+  }
+  const data = new Uint8Array(W * H);
+  const seen = new Uint8Array(W * H);
+  const holeAnchors: { x: number; y: number }[] = [];
+  for (let start = 0; start < W * H; start++) {
+    if (grid.data[start] || outside[start] || seen[start]) continue;
+    const cells: number[] = [];
+    const q = [start];
+    seen[start] = 1;
+    while (q.length) {
+      const i = q.pop()!;
+      cells.push(i);
+      const x = i % W;
+      for (const j of [x > 0 ? i - 1 : -1, x < W - 1 ? i + 1 : -1, i - W, i + W])
+        if (j >= 0 && j < W * H && !seen[j] && !grid.data[j] && !outside[j]) {
+          seen[j] = 1;
+          q.push(j);
+        }
+    }
+    if (cells.length < MIN_HOLE_CELLS) continue; // pinholes and mask noise don't count
+    let sx = 0, top = H;
+    for (const i of cells) {
+      data[i] = 1;
+      sx += i % W;
+      top = Math.min(top, Math.floor(i / W));
+    }
+    holeAnchors.push({ x: sx / cells.length + 0.5, y: top + 6 });
+  }
+  return { holes: { width: W, height: H, data }, holeAnchors };
+}
+
+/** Is world point (wx, wy) inside one of the placed item's holes? */
+export function holeAt(p: Placement, wx: number, wy: number): boolean {
+  const t = (-p.rotationDeg * Math.PI) / 180;
+  const dx = wx - p.x, dy = wy - p.y;
+  const gx = Math.floor(dx * Math.cos(t) - dy * Math.sin(t) + p.shape.grid.width / 2);
+  const gy = Math.floor(dx * Math.sin(t) + dy * Math.cos(t) + p.shape.grid.height / 2);
+  const h = p.shape.holes;
+  return gx >= 0 && gy >= 0 && gx < h.width && gy < h.height && h.data[gy * h.width + gx] === 1;
+}
+
+/** Grid point → world, for a placed item. */
+export function gridToWorld(p: Placement, gx: number, gy: number) {
+  const r = (p.rotationDeg * Math.PI) / 180;
+  const lx = gx - p.shape.grid.width / 2, ly = gy - p.shape.grid.height / 2;
+  return { x: p.x + lx * Math.cos(r) - ly * Math.sin(r), y: p.y + lx * Math.sin(r) + ly * Math.cos(r) };
 }

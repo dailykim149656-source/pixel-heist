@@ -1,16 +1,26 @@
 "use client";
 
 import type { LootItem } from "@/lib/loot";
+import type { Stage } from "@/lib/stages";
 
-type Props = { seconds: number; extractions: number; used: LootItem[]; onRetry: () => void; onNewPhoto: () => void };
+type Props = {
+  seconds: number;
+  extractions: number;
+  used: LootItem[];
+  stageName: string;
+  nextStage: Stage | null;
+  onNext: () => void;
+  onRetry: () => void;
+  onNewPhoto: () => void;
+};
 
-export function SuccessCard({ seconds, extractions, used, onRetry, onNewPhoto }: Props) {
+export function SuccessCard({ seconds, extractions, used, stageName, nextStage, onNext, onRetry, onNewPhoto }: Props) {
   const mm = String(Math.floor(seconds / 60)).padStart(2, "0"), ss = String(seconds % 60).padStart(2, "0");
   return (
     <div className="success-backdrop" role="dialog" aria-label="Escape success">
       <div className="success-card">
         <h2 className="success-title">ESCAPE SUCCESS!</h2>
-        <p className="success-sub">You stole reality and beat the sketch!</p>
+        <p className="success-sub">{stageName} cleared. You stole reality and beat the sketch!</p>
         <div className="success-stats">
           <div>
             <span className="muted">Objects used</span>
@@ -29,6 +39,11 @@ export function SuccessCard({ seconds, extractions, used, onRetry, onNewPhoto }:
           </div>
         </div>
         <div className="row">
+          {nextStage && (
+            <button className="btn btn-primary" onClick={onNext}>
+              Next: {nextStage.name} →
+            </button>
+          )}
           <button className="btn" onClick={onRetry}>Retry ↺</button>
           <button className="btn btn-pick" onClick={onNewPhoto}>Try your own photo</button>
         </div>

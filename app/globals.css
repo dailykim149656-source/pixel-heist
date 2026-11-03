@@ -234,3 +234,10 @@ button { font: inherit; color: inherit; }
 .segmented button { white-space: nowrap; }
 .photo-tools { gap: 8px; }
 .photo-tools .row.tight { flex-wrap: nowrap; white-space: nowrap; }
+
+/* ---------- stages ---------- */
+.stage-chip select { border: 0; background: transparent; font: inherit; color: inherit; cursor: pointer; padding: 2px 0; }
+.stage-teaser { font-size: 13px; color: var(--ink-soft); margin: 0 0 12px; line-height: 1.4; }
+.stage-teaser b { color: var(--ink); }
+.xray-card td small { color: var(--ink-soft); font-weight: 400; display: block; font-size: 10.5px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

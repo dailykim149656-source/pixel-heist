@@ -1,4 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
+import { stageById } from "../lib/stages";
+import { cameraCandidates, first, hookCandidates, loadFixtureShape, plateCandidates } from "../tests/fixtures";
 
 /**
  * Sample-mode end-to-end runs (PRD §9, §13). Recorded SAM cuts are used, so no live API calls;
@@ -24,9 +26,12 @@ async function worldPoint(page: Page, x: number, y: number) {
   return { x: b.x + (x / 960) * b.width, y: b.y + (y / 540) * b.height };
 }
 
-async function startSample(page: Page, desk: "A" | "B" = "A") {
+async function startSample(page: Page, desk: "A" | "B" = "A", stage = 3) {
+  // Unlock stages up front so each spec can jump straight to the one it tests.
+  await page.addInitScript(() => localStorage.setItem("pixel-heist.unlocked", "5"));
   await page.goto("/");
   await page.getByRole("button", { name: "▶ Play" }).click();
+  await page.locator(".stage-chip select").selectOption(String(stage));
   await page.getByRole("button", { name: `Try Sample Desk ${desk}` }).click();
   await expect(page.locator(".photo-box img")).toBeVisible();
 }
@@ -146,8 +151,9 @@ test("X-ray: the winning ruler bridge is a laser-tripping slab as a bounding box
 
   await page.getByRole("button", { name: "X-ray: mask vs box" }).click();
   const gapRow = page.locator(".xray-card tr", { hasText: "Gap" });
-  await expect(gapRow.locator("td").nth(0)).toHaveText("bridged");
-  await expect(gapRow.locator("td").nth(1)).toHaveText("trips lasers");
+  await expect(gapRow.locator("td").nth(0)).toContainText("✓");
+  await expect(gapRow.locator("td").nth(1)).toContainText("✗");
+  await expect(gapRow.locator("td").nth(1)).toContainText("Trips the lasers");
   // The real game still uses the mask: the mission stays done.
   await expect(mission(page, "Bridge the gap")).toHaveClass(/done/);
 });
@@ -170,6 +176,57 @@ test("Desk B: a different photo, a different solution — calculator on the came
   await dropLoot(page, 1, 495, 418, 19);
   await expect(mission(page, "Bridge the gap")).toHaveClass(/done/);
 
+  await page.getByRole("button", { name: /RUN HEIST/ }).click();
+  await expect(page.getByText("ESCAPE SUCCESS!")).toBeVisible({ timeout: 10_000 });
+});
+
+test("Stage 1: a fresh game starts in the Lobby with only a camera to beat", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "▶ Play" }).click();
+  await expect(page.locator(".stage-chip select")).toHaveValue("1");
+  await expect(page.locator(".checklist li")).toHaveText([/Block the camera/, /Reach the vault/]);
+  // Later stages stay locked until earlier ones are cleared.
+  await expect(page.locator('.stage-chip option[value="2"]')).toHaveAttribute("disabled", "");
+});
+
+test("Stage 4: the scissors can't hold the plate; the sticky note can, and the door opens", async ({ page }) => {
+  const s = stageById(4);
+  const sticky = loadFixtureShape("d2-sticky"), calculator = loadFixtureShape("d2-calculator");
+  const plateSpot = first(plateCandidates(s, s.plates[0], sticky))!;
+  const camSpot = first(cameraCandidates(s, s.cameras[0], calculator))!;
+
+  await startSample(page, "B", 4);
+  await page.getByRole("radio", { name: "Recorded" }).click();
+  await steal(page, { x: 1160, y: 900 }); // sticky note
+  await steal(page, { x: 1140, y: 448 }); // calculator
+  await dropLoot(page, 0, plateSpot.x, plateSpot.y, sticky.grid.height);
+  await expect(mission(page, "Weigh down the plate")).toHaveClass(/done/);
+  await dropLoot(page, 1, camSpot.x, camSpot.y, calculator.grid.height);
+  await expect(mission(page, "Block the camera")).toHaveClass(/done/);
+
+  await page.getByRole("button", { name: /RUN HEIST/ }).click();
+  await expect(page.getByText("ESCAPE SUCCESS!")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("button", { name: /Next: The Hook Hall/ })).toBeVisible();
+});
+
+test("Stage 5: the mug hangs on the hook by its handle; without it the thief is stuck at the gate", async ({ page }) => {
+  const s = stageById(5);
+  const mug = loadFixtureShape("mug");
+  const hookSpot = first(hookCandidates(s, s.hooks[0], mug), (p) => p.rotationDeg === 0)!;
+
+  await startSample(page, "A", 5);
+  await page.getByRole("radio", { name: "Recorded" }).click();
+  await steal(page, MUG);
+  await steal(page, RULER);
+  await dropLoot(page, 1, 585, 418, 25); // ruler over the gap
+  await expect(mission(page, "Bridge the gap")).toHaveClass(/done/);
+
+  await page.getByRole("button", { name: /RUN HEIST/ }).click();
+  await expect(page.locator(".mission [role=alert]")).toContainText("Stuck!", { timeout: 10_000 });
+  await page.getByRole("button", { name: /Try again/ }).click();
+
+  await dropLoot(page, 0, hookSpot.x, hookSpot.y, mug.grid.height);
+  await expect(mission(page, "Hang something on the hook")).toHaveClass(/done/);
   await page.getByRole("button", { name: /RUN HEIST/ }).click();
   await expect(page.getByText("ESCAPE SUCCESS!")).toBeVisible({ timeout: 10_000 });
 });

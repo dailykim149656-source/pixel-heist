@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { boxPlacement, occupiedAt, type Placement } from "@/lib/geometry";
-import { judge, placementProblem, snapToLedges } from "@/lib/judge";
-import { planRun, runDurationMs, RUN_SPEED_PX_PER_S, type GameState, type RunPlan } from "@/lib/heist";
+import { judge, missionList, placementProblem, snapPlacement } from "@/lib/judge";
+import { planRun, runDurationMs, RUN_SPEED_PX_PER_S, thiefY, type GameState, type RunPlan } from "@/lib/heist";
 import { buildPreview, extractLoot, normalizePhoto, segmentLive, segmentSample, type LootItem, type Photo, type Preview } from "@/lib/loot";
 import { SEGMENT_ERROR_TEXT, type PromptPoint, type SegmentErrorCode } from "@/lib/segment-types";
 import { samBagged, samError, samGreeting, samRecordedMiss, samReply, yourRequest, type ChatMessage } from "@/lib/sam-voice";
-import { FLOOR_Y, MAX_LOOT, ROTATE_STEP_DEG, THIEF, WORLD } from "@/lib/stage";
+import { MAX_LOOT, ROTATE_STEP_DEG, THIEF, WORLD } from "@/lib/stage";
+import { STAGES, stageById } from "@/lib/stages";
 import { SAMPLES, type SampleId } from "@/lib/samples";
 import type { Scene } from "@/lib/draw";
 import { LootBar } from "./LootBar";
@@ -26,6 +27,8 @@ export type SegmentState =
 type Placed = { x: number; y: number; rotationDeg: number };
 type Drag = { id: string; rotationDeg: number; grab: { dx: number; dy: number }; world: { x: number; y: number } | null };
 
+const PROGRESS_KEY = "pixel-heist.unlocked";
+
 export function Game({ onExit }: { onExit: () => void }) {
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
@@ -36,10 +39,21 @@ export function Game({ onExit }: { onExit: () => void }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [gameState, setGameState] = useState<GameState>("SETUP");
+  const [stageId, setStageId] = useState(1);
+  const [unlocked, setUnlocked] = useState(1);
+  const stage = stageById(stageId);
+  useEffect(() => {
+    try {
+      const saved = Number(localStorage.getItem(PROGRESS_KEY));
+      if (saved > 1) setUnlocked(Math.min(saved, STAGES.length));
+    } catch {
+      // storage unavailable: progress just isn't remembered
+    }
+  }, []);
   const [run, setRun] = useState<{ plan: RunPlan; startedAt: number } | null>(null);
   const [now, setNow] = useState(0);
   const [extractions, setExtractions] = useState(0);
-  const [startedAt] = useState(() => Date.now());
+  const [startedAt, setStartedAt] = useState(() => Date.now());
   const [finishedAt, setFinishedAt] = useState<number | null>(null);
   const worldRef = useRef<HTMLCanvasElement>(null);
   const [chat, setChat] = useState<ChatMessage[]>([]);
@@ -152,35 +166,36 @@ export function Game({ onExit }: { onExit: () => void }) {
   const candidate = useMemo(() => {
     if (!drag?.world) return null;
     const raw = { shape: byId.get(drag.id)!.shape, x: drag.world.x - drag.grab.dx, y: drag.world.y - drag.grab.dy, rotationDeg: drag.rotationDeg };
-    return snapToLedges(raw);
-  }, [drag, byId]);
+    return snapPlacement(stage, raw);
+  }, [drag, byId, stage]);
 
   const placedList = useMemo(
     () => Object.entries(placed).filter(([id]) => id !== drag?.id && byId.has(id)).map(([id, p]) => ({ id, placement: toPlacement(id, p) })),
     [placed, drag, byId, toPlacement],
   );
 
-  const settled = useMemo(() => judge(placedList.map((p) => p.placement)), [placedList]);
+  const settled = useMemo(() => judge(stage, placedList.map((p) => p.placement)), [stage, placedList]);
   // X-ray: the same placements judged as box-only colliders (what you'd get without SAM's mask).
   const boxes = useMemo(
     () => (xray ? placedList.map(({ id, placement }) => boxPlacement(placement, byId.get(id)!.box)) : []),
     [xray, placedList, byId],
   );
-  const boxJudged = useMemo(() => (xray ? judge(boxes) : null), [xray, boxes]);
+  const boxJudged = useMemo(() => (xray ? judge(stage, boxes) : null), [xray, boxes, stage]);
   const live = useMemo(
-    () => (candidate ? judge([...placedList.map((p) => p.placement), candidate]) : settled),
-    [candidate, placedList, settled],
+    () => (candidate ? judge(stage, [...placedList.map((p) => p.placement), candidate]) : settled),
+    [candidate, placedList, settled, stage],
   );
-  const candidateProblem = candidate ? placementProblem(candidate) : null;
+  const candidateProblem = candidate ? placementProblem(stage, candidate) : null;
+  const missions = missionList(stage, settled);
+  const liveDone = missionList(stage, live).filter((m) => m.done).length;
   const candidateStatus = !candidate
     ? null
     : candidateProblem
       ? "invalid"
-      : (live.camera.blocked && !settled.camera.blocked) || (live.gap.bridged && !settled.gap.bridged)
+      : liveDone > missions.filter((m) => m.done).length
         ? "useful"
         : "neutral";
 
-  const missions = { cameraBlocked: settled.camera.blocked, gapBridged: settled.gap.bridged, vaultReached: gameState === "WON" };
 
   useEffect(() => {
     if (gameState === "SETUP" || gameState === "READY") setGameState(placedList.length > 0 ? "READY" : "SETUP");
@@ -256,10 +271,10 @@ export function Game({ onExit }: { onExit: () => void }) {
       }
       if (!selected || !placed[selected]) return;
       const p = placed[selected];
-      const next = snapToLedges({ ...toPlacement(selected, p), rotationDeg: (p.rotationDeg + step + 360) % 360 });
-      if (!placementProblem(next)) setPlaced({ ...placed, [selected]: { x: next.x, y: next.y, rotationDeg: next.rotationDeg } });
+      const next = snapPlacement(stage, { ...toPlacement(selected, p), rotationDeg: (p.rotationDeg + step + 360) % 360 });
+      if (!placementProblem(stage, next)) setPlaced({ ...placed, [selected]: { x: next.x, y: next.y, rotationDeg: next.rotationDeg } });
     },
-    [drag, selected, placed, toPlacement, editable],
+    [drag, selected, placed, toPlacement, editable, stage],
   );
 
   useEffect(() => {
@@ -274,11 +289,11 @@ export function Game({ onExit }: { onExit: () => void }) {
 
   // ---- RUN HEIST ------------------------------------------------------------------------
   const runHeist = useCallback(() => {
-    const plan = planRun(settled);
+    const plan = planRun(stage, settled);
     setSelected(null);
     setGameState("RUNNING");
     setRun({ plan, startedAt: performance.now() });
-  }, [settled]);
+  }, [settled, stage]);
 
   useEffect(() => {
     if (!run) return;
@@ -289,18 +304,41 @@ export function Game({ onExit }: { onExit: () => void }) {
       const done = t - run.startedAt >= runDurationMs(run.plan);
       if (done && gameState === "RUNNING") {
         setGameState(run.plan.outcome);
-        if (run.plan.outcome === "WON") setFinishedAt(Date.now());
+        if (run.plan.outcome === "WON") {
+          setFinishedAt(Date.now());
+          const next = Math.min(STAGES.length, stageId + 1);
+          setUnlocked((u) => {
+            const v = Math.max(u, next);
+            try {
+              localStorage.setItem(PROGRESS_KEY, String(v));
+            } catch {
+              // storage unavailable
+            }
+            return v;
+          });
+        }
       }
-      if (!done || run.plan.outcome === "FELL" || run.plan.outcome === "CAUGHT") raf = requestAnimationFrame(tick);
+      if (!done || run.plan.outcome !== "WON") raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [run, gameState]);
+  }, [run, gameState, stageId]);
 
   const resetRun = useCallback(() => {
     setRun(null);
     setGameState(placedList.length ? "READY" : "SETUP");
   }, [placedList.length]);
+
+  /** Loot carries over between stages; placements, runs and the clock start fresh. */
+  const goToStage = useCallback((id: number) => {
+    setStageId(id);
+    setPlaced({});
+    setRun(null);
+    setSelected(null);
+    setGameState("SETUP");
+    setStartedAt(Date.now());
+    setFinishedAt(null);
+  }, []);
 
   const resetAll = useCallback(() => {
     setRun(null);
@@ -314,20 +352,22 @@ export function Game({ onExit }: { onExit: () => void }) {
 
   // ---- scene ----------------------------------------------------------------------------
   const thief = useMemo((): Scene["thief"] => {
-    if (!run) return { x: THIEF.startX, y: FLOOR_Y, pose: "idle", t: 0 };
+    const placements = placedList.map((p) => p.placement);
+    if (!run) return { x: THIEF.startX, y: thiefY(stage, placements, THIEF.startX), pose: "idle", t: 0 };
     const elapsed = now - run.startedAt;
     const total = runDurationMs(run.plan);
     const x = THIEF.startX + Math.min(elapsed, total) * (RUN_SPEED_PX_PER_S / 1000);
     const over = Math.max(0, elapsed - total);
-    const pose = elapsed < total ? "run" : run.plan.outcome === "CAUGHT" ? "caught" : run.plan.outcome === "FELL" ? "fell" : "won";
-    return { x, y: settled.gap.surfaceY(x), pose, t: pose === "run" ? elapsed : over };
-  }, [run, now, settled]);
+    const pose = elapsed < total ? "run" : run.plan.outcome === "CAUGHT" ? "caught" : run.plan.outcome === "FELL" ? "fell" : run.plan.outcome === "STUCK" ? "stuck" : "won";
+    return { x, y: thiefY(stage, placements, x), pose, t: pose === "run" ? elapsed : over };
+  }, [run, now, stage, placedList]);
 
   const scene: Scene = {
     placed: placedList.map(({ id, placement }) => ({ placement, sprite: byId.get(id)!.sprite })),
     candidate: candidate && candidateStatus ? { placement: candidate, sprite: byId.get(drag!.id)!.sprite, status: candidateStatus } : null,
+    stage,
     live,
-    missions,
+    settled,
     thief,
     xray: boxJudged ? { boxes, judged: boxJudged } : null,
   };
@@ -341,7 +381,17 @@ export function Game({ onExit }: { onExit: () => void }) {
           <span className="logo">PIXEL HEIST</span>
         </button>
         <span className="tagline">Steal reality. Escape the sketch.</span>
-        <span className="stage-chip">Stage 1: Museum Sketch Escape</span>
+        <label className="stage-chip">
+          <span className="sr-only">Stage</span>
+          <select value={stageId} onChange={(e) => goToStage(Number(e.target.value))} disabled={gameState === "RUNNING"}>
+            {STAGES.map((st) => (
+              <option key={st.id} value={st.id} disabled={st.id > unlocked}>
+                Stage {st.id}: {st.name}
+                {st.id > unlocked ? " 🔒" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
         <button className="icon-btn" onClick={resetAll} title="Start over">↺</button>
       </header>
 
@@ -372,7 +422,7 @@ export function Game({ onExit }: { onExit: () => void }) {
               X-ray: mask vs box
             </button>
             <span className="kbd-hint">Rotate: R / Shift+R · Del removes</span>
-            {gameState === "CAUGHT" || gameState === "FELL" ? (
+            {gameState === "CAUGHT" || gameState === "FELL" || gameState === "STUCK" ? (
               <button className="btn btn-primary" onClick={resetRun}>Try again ↺</button>
             ) : (
               <button className="btn btn-primary btn-run" onClick={runHeist} disabled={!editable || placedList.length === 0}>
@@ -383,7 +433,9 @@ export function Game({ onExit }: { onExit: () => void }) {
         </section>
 
         <MissionPanel
+          stage={stage}
           missions={missions}
+          vaultReached={gameState === "WON"}
           settled={settled}
           boxJudged={boxJudged}
           gameState={gameState}
@@ -410,6 +462,9 @@ export function Game({ onExit }: { onExit: () => void }) {
           seconds={Math.round(((finishedAt ?? Date.now()) - startedAt) / 1000)}
           extractions={extractions}
           used={usedItems}
+          stageName={stage.name}
+          nextStage={STAGES.find((st) => st.id === stageId + 1) ?? null}
+          onNext={() => goToStage(stageId + 1)}
           onRetry={resetRun}
           onNewPhoto={() => {
             resetAll();

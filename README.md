@@ -38,6 +38,21 @@ but their open finger holes make them too thick for the lasers. Same rules, diff
   get without a segmentation mask. The diagonal ruler's box is a slab that trips the lasers. With boxes the level is
   unsolvable, and `tests/xray.test.ts` checks that claim on the real SAM masks.
 
+## Stages
+
+Each stage adds one idea, and every one is judged from the mask alone. `tests/stages.test.ts` solves each stage with the
+real SAM cuts and checks that the wrong shapes fail.
+
+| # | Stage | New idea | Desk A | Desk B |
+|---|---|---|---|---|
+| 1 | The Lobby | Block a camera's rays | mug | calculator / sticky note |
+| 2 | The Broken Corridor | Bridge a gap, thin enough for the lasers | ruler | pen |
+| 3 | The Gallery | Both at once; one object can't do both | mug + ruler | calculator + pen |
+| 4 | The Weigh Station | A plate that needs bulk (thin bars and loops fail) | mug + ruler | sticky note + calculator |
+| 5 | The Hook Hall | A hook that only catches a real hole in the mask | mug handle + ruler | scissor loop + pen |
+
+Progress is remembered in the browser. Stages 6–10 are planned.
+
 ## Honesty notes
 
 - **LIVE** means a real SAM 3.1 call made just now. **RECORDED** replays real SAM 3.1 responses captured on 2026-11-03

@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { boxPlacement, occupiedAt, occupiedBounds } from "@/lib/geometry";
 import { judgeGap, placementProblem } from "@/lib/judge";
+import { stageById } from "@/lib/stages";
 import { gapPlacements, loadFixtureWithBox } from "./fixtures";
 
+const stage = stageById(3);
+const gap = stage.gaps[0];
 const ruler = loadFixtureWithBox("ruler");
 const mug = loadFixtureWithBox("mug");
 
@@ -25,16 +28,16 @@ describe("X-ray: SAM mask vs bounding box (the claim shown on screen)", () => {
   });
 
   it("where the SAM-masked ruler bridges the gap, its box trips the lasers", () => {
-    const bridging = [...gapPlacements(ruler.shape)].filter((p) => !placementProblem(p) && judgeGap([p]).bridged);
+    const bridging = [...gapPlacements(stage, gap, ruler.shape)].filter((p) => !placementProblem(stage, p) && judgeGap(gap, [p]).bridged);
     expect(bridging.length).toBeGreaterThan(0);
     for (const p of bridging) {
-      const g = judgeGap([boxPlacement(p, ruler.box)]);
+      const g = judgeGap(gap, [boxPlacement(p, ruler.box)]);
       expect(g.bridged).toBe(false);
       expect(g.tripsLaser).toBe(true);
     }
   });
 
   it("with bounding boxes the gap can never be bridged — the level is unsolvable", () => {
-    for (const { box } of [ruler, mug]) for (const p of gapPlacements(box)) expect(judgeGap([p]).bridged).toBe(false);
+    for (const { box } of [ruler, mug]) for (const p of gapPlacements(stage, gap, box)) expect(judgeGap(gap, [p]).bridged).toBe(false);
   });
 });
