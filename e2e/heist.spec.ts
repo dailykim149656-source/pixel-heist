@@ -30,7 +30,8 @@ async function startSample(page: Page, desk: "A" | "B" = "A", stage = 3) {
   // Unlock stages up front so each spec can jump straight to the one it tests.
   await page.addInitScript(() => localStorage.setItem("pixel-heist.unlocked", "5"));
   await page.goto("/");
-  await page.getByRole("button", { name: "▶ Play" }).click();
+  await page.getByRole("button", { name: "▶ Play the Heist" }).click();
+  await page.getByRole("button", { name: "Skip ⏭" }).click();
   await page.locator(".stage-chip select").selectOption(String(stage));
   await page.getByRole("button", { name: `Try Sample Desk ${desk}` }).click();
   await expect(page.locator(".photo-box img")).toBeVisible();
@@ -180,9 +181,15 @@ test("Desk B: a different photo, a different solution — calculator on the came
   await expect(page.getByText("ESCAPE SUCCESS!")).toBeVisible({ timeout: 10_000 });
 });
 
-test("Stage 1: a fresh game starts in the Lobby with only a camera to beat", async ({ page }) => {
+test("Landing → prologue comic → Stage 1: a fresh game starts in the Lobby with only a camera to beat", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "▶ Play" }).click();
+  await expect(page.getByRole("heading", { name: "PIXEL HEIST" })).toBeVisible();
+  await page.getByRole("button", { name: "▶ Play the Heist" }).click();
+  // Six panels; Sam is labelled as the model on the first call.
+  await expect(page.locator(".comic-panel.on")).toHaveCount(1);
+  for (let i = 0; i < 5; i++) await page.getByRole("button", { name: "Next ▸" }).click();
+  await expect(page.locator(".comic-panel.on")).toHaveCount(6);
+  await page.getByRole("button", { name: "▶ Start the heist" }).click();
   await expect(page.locator(".stage-chip select")).toHaveValue("1");
   await expect(page.locator(".checklist li")).toHaveText([/Block the camera/, /Reach the vault/]);
   // Later stages stay locked until earlier ones are cleared.
@@ -229,4 +236,13 @@ test("Stage 5: the mug hangs on the hook by its handle; without it the thief is 
   await expect(mission(page, "Hang something on the hook")).toHaveClass(/done/);
   await page.getByRole("button", { name: /RUN HEIST/ }).click();
   await expect(page.getByText("ESCAPE SUCCESS!")).toBeVisible({ timeout: 10_000 });
+});
+
+test("Watch Prologue replays the comic and Skip returns to the landing page", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Watch Prologue" }).click();
+  await expect(page.getByText("Pencil cameras, pencil lasers", { exact: false })).toBeHidden();
+  await expect(page.locator(".comic-panel.on")).toHaveCount(1);
+  await page.getByRole("button", { name: "Skip ⏭" }).click();
+  await expect(page.getByRole("button", { name: "▶ Play the Heist" })).toBeVisible();
 });
