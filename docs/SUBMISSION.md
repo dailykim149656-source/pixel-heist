@@ -4,7 +4,7 @@ Meta Global AI Developer Hackathon 2026. Paste each section into the matching fo
 
 - **Play:** https://pixel-heist.vercel.app (desktop or phone, no install, no sign-in)
 - **Code:** https://github.com/dailykim149656-source/pixel-heist (MIT)
-- **Demo video:** _[add link after upload]_ (2:59)
+- **Demo video:** https://youtu.be/Xj7Ni6tOnFQ (2:59)
 
 ---
 

@@ -98,6 +98,8 @@ The 🔊 button mutes everything; nothing plays before the first click.
 
 ## Demo video
 
+Watch it at **https://youtu.be/Xj7Ni6tOnFQ** (2:59).
+
 `npx playwright test -c demo.config.ts` records the desktop footage (real game, recorded cuts, live Muse) and logs
 every sound it plays; `node scripts/make-demo.mjs <phone-recording>` cuts it with a phone screen recording and mixes
 the sounds back in at the same moments, with the narrator (`assets/narration`, ElevenLabs) on top and the game ducked under each line.

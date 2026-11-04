@@ -46,6 +46,7 @@ export function Landing({ onPlay, onPrologue }: Props) {
           <div className="title-actions">
             <button className="btn btn-primary btn-big" onClick={onPlay}>▶ Play the Heist</button>
             <button className="btn" onClick={onPrologue}>Watch Prologue</button>
+            <a className="btn" href="#media">Demo video</a>
           </div>
         </div>
         <div className="hero-art">
@@ -80,8 +81,20 @@ export function Landing({ onPlay, onPrologue }: Props) {
         <h2 className="section-title">Media</h2>
         <div className="media-grid">
           <figure className="media-card">
-            <div className="media-video">Demo video — coming soon</div>
-            <figcaption>3-minute walkthrough: live SAM cuts, mask vs box X-ray, the run to the vault.</figcaption>
+            <div className="media-video">
+              <iframe
+                src="https://www.youtube-nocookie.com/embed/Xj7Ni6tOnFQ"
+                title="PIXEL HEIST demo video"
+                loading="lazy"
+                allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                referrerPolicy="strict-origin-when-cross-origin"
+                allowFullScreen
+              />
+            </div>
+            <figcaption>
+              3-minute demo: a live SAM cut on a phone, mask vs box X-ray, Muse hints and the Curator&apos;s rooms.{" "}
+              <a href="https://youtu.be/Xj7Ni6tOnFQ" target="_blank" rel="noreferrer">Watch on YouTube ↗</a>
+            </figcaption>
           </figure>
           <div className="media-card media-facts">
             <h3>Under the hood</h3>

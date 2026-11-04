@@ -52,6 +52,7 @@ button { font: inherit; color: inherit; }
   box-shadow: 2px 2px 0 rgba(63, 58, 52, 0.25);
   transition: transform 80ms, box-shadow 80ms, background 120ms;
 }
+a.btn { display: inline-block; color: var(--ink); text-decoration: none; }
 .btn:hover:not(:disabled) { transform: translate(-1px, -1px); box-shadow: 3px 3px 0 rgba(63, 58, 52, 0.3); }
 .btn:active:not(:disabled) { transform: translate(1px, 1px); box-shadow: 0 0 0; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -272,10 +273,8 @@ button { font: inherit; color: inherit; }
 .media-grid { display: grid; grid-template-columns: 3fr 2fr; gap: 20px; }
 .media-card { margin: 0; background: #fffdf8; border: 1.5px solid var(--line); border-radius: 6px; padding: 14px; }
 .media-card figcaption { font-size: 13px; color: var(--ink-soft); margin-top: 8px; }
-.media-video {
-  aspect-ratio: 16 / 9; display: grid; place-items: center; background: var(--paper-2); border: 2px dashed var(--line);
-  font: 20px var(--font-hand), cursive; color: var(--ink-soft);
-}
+.media-video { aspect-ratio: 16 / 9; background: var(--paper-2); border: 2px solid var(--ink); }
+.media-video iframe { display: block; width: 100%; height: 100%; border: 0; }
 .media-facts h3 { font: 22px var(--font-hand), cursive; margin: 0 0 6px; }
 .media-facts ul { margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.6; }
 .landing-foot { text-align: center; padding: 24px 16px 36px; border-top: 1.5px dashed var(--line); font-size: 12px; }
