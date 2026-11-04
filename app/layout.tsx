@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Patrick_Hand } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 const hand = Patrick_Hand({ weight: "400", subsets: ["latin"], variable: "--font-hand" });
@@ -12,7 +13,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={hand.variable}>
-      <body>{children}</body>
+      <body>
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }
